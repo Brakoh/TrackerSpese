@@ -546,6 +546,7 @@ function reorderLedger() {
     rule.before(note)
   }
   const arriving = [...ledger.querySelectorAll(".filter-none, .filter-rule")]
+  if (homeFilter) ledger.scrollTop = 0
   if (reduce) {
     rows.forEach((row) => {
       row.style.transition = ""
