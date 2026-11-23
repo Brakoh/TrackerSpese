@@ -1,0 +1,649 @@
+const D = SpeseDomain
+const KEY = "spese.v1"
+
+const ICONS = {
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  once: '<path d="M7 3.5h7l4.5 4.5V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z"/><path d="M14 3.5V8h4.5M8.5 13h7M8.5 17h4.5"/>',
+  sub: '<path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4.5V10h-5.5"/>',
+  plan: '<path d="M4 7.5h16V20H4z"/><path d="M4 12h16M9.2 7.5V20M14.8 7.5V20"/>',
+  month: '<rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 5.5V3M16 5.5V3"/>',
+  archive: '<path d="M4 8h16v11.5H4z"/><path d="M4 8l2.2-3h11.6L20 8M10 13.5h4"/>',
+  commitments: '<path d="M4.5 12a7.5 7.5 0 0 1 12.6-5.5"/><path d="M19.5 4.5V9H15"/><path d="M19.5 12a7.5 7.5 0 0 1-12.6 5.5"/><path d="M4.5 19.5V15H9"/>',
+  back: '<path d="M15 5.5 8 12l7 6.5"/>',
+  download: '<path d="M12 4.5v10"/><path d="M8 11l4 4 4-4"/><path d="M5.5 19.5h13"/>',
+  close: '<path d="M7 7l10 10M17 7 7 17"/>',
+}
+
+let entries = load()
+let armedId = null
+let dirty = false
+let lastHash = location.hash
+let sheetAbort = null
+let suppress = false
+
+function icon(name) {
+  return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + "</svg>"
+}
+
+function esc(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[ch]))
+}
+
+function load() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(KEY) || "")
+    if (!parsed || !Array.isArray(parsed.entries)) return []
+    return parsed.entries.filter(validEntry)
+  } catch {
+    return []
+  }
+}
+
+function validEntry(entry) {
+  if (!entry || typeof entry.id !== "string" || typeof entry.name !== "string") return false
+  if (entry.kind === "once") return Number.isInteger(entry.amount) && isoDate(entry.date)
+  if (entry.kind === "sub") {
+    return Number.isInteger(entry.amount) && Number.isInteger(entry.renewDay) && /^\d{4}-\d{2}$/.test(entry.startedMonth)
+  }
+  return entry.kind === "plan" && Number.isInteger(entry.total) && Number.isInteger(entry.months) && isoDate(entry.startDate)
+}
+
+function isoDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+}
+
+function persist() {
+  localStorage.setItem(KEY, JSON.stringify({ entries }))
+}
+
+function status(message) {
+  document.getElementById("status").textContent = message
+}
+
+function reduceMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
+function parseRoute() {
+  const parts = (location.hash || "#/mese").replace(/^#/, "").split("/").filter(Boolean)
+  const top = parts[0] || "mese"
+  const today = D.todayISO()
+  if (top === "archivio") {
+    const year = /^\d{4}$/.test(parts[1] || "") ? parts[1] : today.slice(0, 4)
+    return { name: "archivio", year }
+  }
+  if (top === "impegni") return { name: "impegni" }
+  const ym = /^\d{4}-\d{2}$/.test(parts[1] || "") ? parts[1] : D.currentYM()
+  if (parts[2] === "nuova") {
+    const kind = ["once", "sub", "plan"].includes(parts[3]) ? parts[3] : "once"
+    return { name: "mese", ym, mode: "create", kind }
+  }
+  if (parts[2] === "modifica" && parts[3]) return { name: "mese", ym, mode: "edit", id: parts[3] }
+  return { name: "mese", ym }
+}
+
+function go(hash) {
+  if (location.hash === hash) render()
+  else location.hash = hash
+}
+
+function names() {
+  return [...new Set(entries.map((entry) => entry.name))].sort((a, b) => a.localeCompare(b, "it"))
+}
+
+function kindLabel(line) {
+  if (line.kind === "once") return "Occasionale"
+  if (line.kind === "sub") return "Abbonamento"
+  return "Rata " + (line.index + 1) + " di " + line.months
+}
+
+function meta(line) {
+  const when = line.upcoming ? "In arrivo" : "Addebitata"
+  return D.dayLabel(line.date) + " · " + kindLabel(line) + " · " + when
+}
+
+function topHTML(route) {
+  if (route.name !== "mese") {
+    return '<div class="brand"><span class="mark" aria-hidden="true"></span> Spese</div>'
+  }
+  const title = D.monthTitle(route.ym)
+  const pdf = '<button type="button" class="top-action" id="pdf" aria-label="Scarica il PDF di ' + esc(title) + '">' + icon("download") + "</button>"
+  if (route.ym === D.currentYM()) {
+    return '<div class="brand"><span class="mark" aria-hidden="true"></span> Spese</div>' + pdf
+  }
+  const year = route.ym.slice(0, 4)
+  return '<a class="back" href="#/archivio/' + year + '">' + icon("back") + "<span>Archivio</span></a>" + pdf
+}
+
+function navHTML(route) {
+  const items = [
+    ["mese", "Mese", "month"],
+    ["archivio", "Archivio", "archive"],
+    ["impegni", "Impegni", "commitments"],
+  ]
+  return items.map(([id, label, glyph]) => {
+    const current = route.name === id ? ' aria-current="page"' : ""
+    const href = id === "archivio" ? "#/archivio/" + D.todayISO().slice(0, 4) : "#/" + id
+    return '<a href="' + href + '"' + current + ' aria-label="' + label + '">' + icon(glyph) + "</a>"
+  }).join("")
+}
+
+function monthHTML(route) {
+  const today = D.todayISO()
+  const lines = D.linesForMonth(entries, route.ym, today)
+  const total = D.totalOf(lines)
+  const ym = route.ym
+  const actions = [
+    ["nuova/once", "add", "Aggiungi"],
+    ["nuova/once", "once", "Occasionale"],
+    ["nuova/sub", "sub", "Abbonamento"],
+    ["nuova/plan", "plan", "Rate"],
+  ].map(([path, bubble, label]) => {
+    return '<a href="#/mese/' + ym + "/" + path + '"><span class="bubble ' + bubble + '">' + icon(bubble === "add" ? "plus" : bubble) + "</span>" + esc(label) + "</a>"
+  }).join("")
+  const list = lines.length
+    ? '<ul class="moves">' + lines.map((line) => {
+      return '<li><button type="button" class="move" data-edit="' + esc(line.id) + '" title="' + esc(line.name) + '"><span class="badge ' + line.kind + '">' + icon(line.kind) + '</span><span class="move-text"><span class="move-name">' + esc(line.name) + '</span><span class="move-meta">' + esc(meta(line)) + '</span></span><span class="move-amount">' + esc(D.formatEUR(line.amount)) + "</span></button></li>"
+    }).join("") + "</ul>"
+    : '<div class="empty"><img src="assets/img/mese-vuoto.jpg" alt="" width="1024" height="1024"><p>Nessuna spesa in ' + esc(D.monthName(ym).toLowerCase()) + ". Aggiungine una con i tasti qui sopra.</p></div>"
+  return '<article class="hero"><div class="hero-copy"><h1>' + esc(D.monthName(ym)) + '</h1><p class="hero-amount"><span class="sr">Totale del mese </span>' + esc(D.formatEUR(total)) + '</p></div><div class="hero-art"><img src="assets/img/hero-spesa.jpg" alt="" width="1024" height="1024" fetchpriority="high"></div></article><div class="actions">' + actions + "</div>" + list
+}
+
+function archiveHTML(route) {
+  const today = D.todayISO()
+  const year = Number(route.year)
+  const nowY = Number(today.slice(0, 4))
+  let min = nowY
+  entries.forEach((entry) => {
+    const source = entry.kind === "once" ? entry.date : entry.kind === "sub" ? entry.startedMonth : entry.startDate
+    min = Math.min(min, Number(source.slice(0, 4)))
+  })
+  const years = []
+  for (let y = nowY; y >= min; y -= 1) years.push(String(y))
+  const chips = years.map((item) => {
+    const current = item === route.year ? ' aria-current="true"' : ""
+    return '<a href="#/archivio/' + item + '"' + current + ">" + item + "</a>"
+  }).join("")
+  const months = D.pastMonths(year, today)
+  const cards = months.map((ym) => {
+    const total = D.totalOf(D.linesForMonth(entries, ym, today))
+    return '<a class="month-card" href="#/mese/' + ym + '"><span><strong>' + esc(D.monthName(ym)) + '</strong><span>' + esc(String(year)) + '</span></span><b>' + esc(D.formatEUR(total)) + "</b></a>"
+  }).join("")
+  const body = months.length
+    ? '<div class="stack">' + cards + '</div><article class="year-total"><h2>Mesi chiusi del ' + esc(route.year) + "</h2><p>" + esc(D.formatEUR(months.reduce((sum, ym) => sum + D.totalOf(D.linesForMonth(entries, ym, today)), 0))) + "</p></article>"
+    : '<div class="empty"><p>I mesi chiusi del ' + esc(route.year) + " compariranno qui.</p></div>"
+  return '<h1 class="page-title">Archivio</h1><figure class="banner"><img src="assets/img/archivio-mesi.jpg" alt="" width="1280" height="720"></figure><div class="years">' + chips + "</div>" + body
+}
+
+function commitmentsHTML() {
+  const today = D.todayISO()
+  const subs = D.activeSubs(entries)
+  const plans = D.activePlans(entries, today)
+  const subCards = subs.length
+    ? subs.map((entry) => subCard(entry)).join("")
+    : '<div class="empty"><p>Nessun abbonamento attivo.</p></div>'
+  const planCards = plans.length
+    ? plans.map((entry) => planCard(entry, today)).join("")
+    : '<div class="empty"><p>Nessuna rateizzazione attiva.</p></div>'
+  return '<h1 class="page-title">Impegni</h1><figure class="banner"><img src="assets/img/impegni-attivi.jpg" alt="" width="1280" height="720"></figure><h2>Abbonamenti</h2><div class="stack">' + subCards + '</div><h2>Rateizzazioni</h2><div class="stack">' + planCards + "</div>"
+}
+
+function subCard(entry) {
+  const armed = armedId === entry.id
+  const actions = armed
+    ? '<div class="confirm"><button type="button" class="stop" data-cancel>Annulla</button><button type="button" class="stop danger" data-stop="' + esc(entry.id) + '">Conferma</button></div><p>I mesi già addebitati restano.</p>'
+    : '<button type="button" class="stop" data-arm="' + esc(entry.id) + '">Interrompi</button>'
+  return '<article class="commit"><div class="commit-row"><div><h3>' + esc(entry.name) + "</h3><p>Rinnovo il " + entry.renewDay + " · " + esc(D.formatEUR(entry.amount)) + '</p></div><a class="stop" href="#/mese/' + D.currentYM() + "/modifica/" + esc(entry.id) + '">Modifica</a></div>' + actions + "</article>"
+}
+
+function planCard(entry, today) {
+  const progress = D.planProgress(entry, today)
+  const place = progress.current === 0
+    ? "Inizia il " + D.dayLabel(entry.startDate)
+    : "Rata " + progress.current + " di " + progress.months
+  return '<article class="commit"><div class="commit-row"><div><h3>' + esc(entry.name) + "</h3><p>" + esc(place) + " · fine " + esc(D.dayLabel(D.planEnd(entry))) + " " + D.planEnd(entry).slice(0, 4) + '</p></div><b>' + esc(D.formatEUR(entry.total)) + '</b></div><a class="stop" href="#/mese/' + D.currentYM() + "/modifica/" + esc(entry.id) + '">Modifica</a></article>'
+}
+
+function field(key, label, control) {
+  const uid = (control.match(/id="([^"]+)"/) || ["", key])[1]
+  return '<label class="field" data-field="' + key + '"><span>' + label + "</span>" + control + '<span class="error" id="' + uid + '-error"></span></label>'
+}
+
+function input(attrs) {
+  return "<input " + attrs + ' autocomplete="off">'
+}
+
+function sheetHTML(route) {
+  const editing = route.mode === "edit"
+  const entry = editing ? entries.find((item) => item.id === route.id) : null
+  if (editing && !entry) return ""
+  const kind = editing ? entry.kind : route.kind
+  const title = editing ? "Modifica spesa" : "Nuova spesa"
+  const values = editing ? valuesFrom(entry) : blank(route)
+  const kinds = editing
+    ? ""
+    : '<div class="kinds" role="radiogroup" aria-label="Tipo di spesa">' +
+      [["once", "Occasionale"], ["sub", "Abbonamento"], ["plan", "Rateizzazione"]].map(([value, label]) => {
+        const checked = value === kind ? " checked" : ""
+        return '<label><input type="radio" name="kind" value="' + value + '"' + checked + ">" + label + "</label>"
+      }).join("") + "</div>"
+  const service = field("name", "Nome del servizio", input('id="service-name" name="name" value="' + esc(values.name) + '" list="nomi"') + listNames())
+  const panels = service + panelOnce(values, kind) + panelSub(values, route, editing, kind) + panelPlan(values, kind)
+  const tools = editing
+    ? '<div class="sheet-tools"><button type="button" class="text-btn danger" id="delete">Elimina</button></div>'
+    : ""
+  return '<div class="overlay"><div class="dim" data-close></div><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><button type="button" class="handle" data-drag aria-label="Trascina per chiudere"><span></span></button><div class="sheet-head"><h2 id="sheet-title">' + title + '</h2><button type="button" class="top-action" data-close aria-label="Chiudi">' + icon("close") + '</button></div><form class="sheet-body" id="expense-form" data-kind="' + kind + '" novalidate>' + kinds + panels + '<button class="submit" type="submit">' + (editing ? "Salva" : "Aggiungi") + "</button>" + tools + "</form></section></div>"
+}
+
+function blank(route) {
+  const { y, m } = D.parseYM(route.ym)
+  const today = D.todayISO()
+  const date = today.slice(0, 7) === route.ym ? today : D.iso(y, m, 1)
+  return { name: "", amount: "", date, renewDay: String(Math.min(28, new Date().getDate())), total: "", months: "", startDate: date, startedMonth: route.ym }
+}
+
+function centsToField(cents) {
+  const whole = Math.floor(cents / 100)
+  const frac = String(cents % 100).padStart(2, "0")
+  return whole + "," + frac
+}
+
+function valuesFrom(entry) {
+  if (entry.kind === "once") {
+    return { name: entry.name, amount: centsToField(entry.amount), date: entry.date, renewDay: "1", total: "", months: "", startDate: entry.date, startedMonth: entry.date.slice(0, 7) }
+  }
+  if (entry.kind === "sub") {
+    return { name: entry.name, amount: centsToField(entry.amount), date: D.todayISO(), renewDay: String(entry.renewDay), total: "", months: "", startDate: entry.startedMonth + "-01", startedMonth: entry.startedMonth }
+  }
+  return { name: entry.name, amount: "", date: entry.startDate, renewDay: "1", total: centsToField(entry.total), months: String(entry.months), startDate: entry.startDate, startedMonth: entry.startDate.slice(0, 7) }
+}
+
+function listNames() {
+  const options = names().map((name) => '<option value="' + esc(name) + '">').join("")
+  return '<datalist id="nomi">' + options + "</datalist>"
+}
+
+function panelOnce(values, kind) {
+  return '<div data-panel="once"' + (kind === "once" ? "" : " hidden") + ">" +
+    field("amount", "Cifra", input('id="amount-once" name="amount" inputmode="decimal" placeholder="15,99" value="' + esc(values.amount) + '"')) +
+    field("date", "Data", input('id="date-once" name="date" type="date" value="' + esc(values.date) + '"')) +
+    "</div>"
+}
+
+function panelSub(values, route, editing, kind) {
+  const start = editing
+    ? field("started", "Primo mese", input('id="started" name="started" type="month" value="' + esc(values.startedMonth) + '"'))
+    : '<p class="hint">Entra da ' + esc(D.monthTitle(route.ym)) + " in avanti.</p>"
+  return '<div data-panel="sub"' + (kind === "sub" ? "" : " hidden") + ">" +
+    field("amount", "Tariffa mensile", input('id="amount-sub" name="amount" inputmode="decimal" placeholder="15,99" value="' + esc(values.amount) + '"')) +
+    field("renew", "Giorno di rinnovo", input('id="renew" name="renew" inputmode="numeric" placeholder="28" value="' + esc(values.renewDay) + '"')) +
+    start + "</div>"
+}
+
+function panelPlan(values, kind) {
+  return '<div data-panel="plan"' + (kind === "plan" ? "" : " hidden") + ">" +
+    field("total", "Costo totale", input('id="total-plan" name="total" inputmode="decimal" placeholder="1.000,00" value="' + esc(values.total) + '"')) +
+    field("months", "Numero di mesi", input('id="months-plan" name="months" inputmode="numeric" placeholder="12" value="' + esc(values.months) + '"')) +
+    field("start", "Data del primo addebito", input('id="start-plan" name="start" type="date" value="' + esc(values.startDate) + '"')) +
+    "</div>"
+}
+
+function render() {
+  sheetAbort?.abort()
+  const route = parseRoute()
+  if (route.name !== "impegni") armedId = null
+  document.getElementById("top").innerHTML = topHTML(route)
+  document.getElementById("contenuto").innerHTML = route.name === "archivio"
+    ? archiveHTML(route)
+    : route.name === "impegni"
+      ? commitmentsHTML()
+      : monthHTML(route)
+  document.getElementById("nav").innerHTML = navHTML(route)
+  const root = document.getElementById("sheet-root")
+  const open = route.name === "mese" && route.mode
+  root.innerHTML = open ? sheetHTML(route) : ""
+  setInert(Boolean(open && root.innerHTML))
+  bindScreen(route)
+  if (open && root.innerHTML) bindSheet(route)
+  document.getElementById("contenuto").scrollTop = 0
+}
+
+function setInert(on) {
+  document.getElementById("top").inert = on
+  document.getElementById("contenuto").inert = on
+  document.getElementById("nav").inert = on
+}
+
+function bindScreen(route) {
+  document.getElementById("pdf")?.addEventListener("click", () => downloadMonth(route.ym))
+  document.querySelectorAll("[data-edit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      go("#/mese/" + route.ym + "/modifica/" + button.dataset.edit)
+    })
+  })
+  document.querySelectorAll("[data-arm]").forEach((button) => {
+    button.addEventListener("click", () => {
+      armedId = button.dataset.arm
+      render()
+    })
+  })
+  document.querySelectorAll("[data-cancel]").forEach((button) => {
+    button.addEventListener("click", () => {
+      armedId = null
+      render()
+    })
+  })
+  document.querySelectorAll("[data-stop]").forEach((button) => {
+    button.addEventListener("click", () => stopSub(button.dataset.stop))
+  })
+}
+
+function downloadMonth(ym) {
+  const today = D.todayISO()
+  const lines = D.linesForMonth(entries, ym, today)
+  const rows = lines.map((line) => D.dayLabel(line.date) + "  " + line.name + "  " + kindLabel(line) + "  " + (line.upcoming ? "in arrivo" : "addebitata") + "  " + D.formatEUR(line.amount))
+  const bytes = D.buildMonthPdf("Spese " + D.monthTitle(ym), rows.length ? rows : ["Nessuna spesa"], "Totale " + D.formatEUR(D.totalOf(lines)))
+  const blob = new Blob([bytes], { type: "application/pdf" })
+  const url = URL.createObjectURL(blob)
+  if (/iPhone|iPad/.test(navigator.userAgent)) {
+    window.open(url, "_blank")
+  } else {
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = "spese-" + ym + ".pdf"
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 8000)
+  status("PDF di " + D.monthTitle(ym) + " pronto.")
+}
+
+function bindSheet(route) {
+  const root = document.getElementById("sheet-root")
+  const panel = root.querySelector(".sheet")
+  const dim = root.querySelector(".dim")
+  const form = root.querySelector("#expense-form")
+  const reduce = reduceMotion()
+  sheetAbort = new AbortController()
+  const signal = sheetAbort.signal
+  syncPanels(form)
+  if (!reduce) {
+    panel.style.transform = "translateY(100%)"
+    dim.style.opacity = "0"
+    requestAnimationFrame(() => {
+      panel.style.transition = "transform 420ms var(--ease-drawer)"
+      dim.style.transition = "opacity 420ms var(--ease-out)"
+      requestAnimationFrame(() => {
+        panel.style.transform = "translateY(0)"
+        dim.style.opacity = "1"
+      })
+    })
+  }
+  bindDrag(panel, dim, route, reduce)
+  root.querySelectorAll("[data-close]").forEach((el) => el.addEventListener("click", () => leave(route), { signal }))
+  form.addEventListener("input", () => { dirty = true }, { signal })
+  form.addEventListener("change", (event) => {
+    syncPanels(form)
+    if (event.target.name === "kind") showErrors(form, {})
+  }, { signal })
+  form.addEventListener("submit", (event) => {
+    event.preventDefault()
+    submitForm(form, route)
+  }, { signal })
+  document.getElementById("delete")?.addEventListener("click", () => removeEntry(route), { signal })
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") leave(route)
+    if (event.key === "Tab") trapFocus(event, root)
+  }, { signal })
+  const viewport = window.visualViewport
+  if (viewport) {
+    const lift = () => {
+      const overlap = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+      panel.style.bottom = overlap + "px"
+    }
+    viewport.addEventListener("resize", lift, { signal })
+    viewport.addEventListener("scroll", lift, { signal })
+  }
+}
+
+function syncPanels(form) {
+  const selected = form.querySelector("input[name=kind]:checked")
+  const kind = selected ? selected.value : form.dataset.kind
+  form.querySelectorAll("[data-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.panel !== kind
+  })
+}
+
+function activeKind(form) {
+  return form.querySelector("input[name=kind]:checked")?.value || form.dataset.kind
+}
+
+function valueOf(form, panel, selector) {
+  return panel.querySelector(selector)?.value.trim() || ""
+}
+
+function submitForm(form, route) {
+  const kind = activeKind(form)
+  const panel = form.querySelector('[data-panel="' + kind + '"]')
+  const errors = {}
+  const name = form.querySelector("#service-name").value.trim()
+  if (!name) errors.name = "Scrivi il nome del servizio."
+  else if (name.length > 80) errors.name = "Il nome è troppo lungo."
+  let entry = null
+  if (kind === "once") {
+    const amount = D.parseAmount(valueOf(form, panel, "[name=amount]"))
+    const date = valueOf(form, panel, "[name=date]")
+    if (amount == null) errors.amount = "Scrivi una cifra, per esempio 15,99."
+    if (!isoDate(date)) errors.date = "Scegli una data."
+    if (!Object.keys(errors).length) {
+      entry = { id: route.id || crypto.randomUUID(), kind, name, amount, date }
+    }
+  } else if (kind === "sub") {
+    const amount = D.parseAmount(valueOf(form, panel, "[name=amount]"))
+    const renewDay = Number(valueOf(form, panel, "[name=renew]"))
+    const startedMonth = panel.querySelector("[name=started]")?.value || route.ym
+    if (amount == null) errors.amount = "Scrivi la tariffa mensile."
+    if (!Number.isInteger(renewDay) || renewDay < 1 || renewDay > 31) errors.renew = "Il giorno va da 1 a 31."
+    if (!/^\d{4}-\d{2}$/.test(startedMonth)) errors.started = "Scegli il primo mese."
+    if (!Object.keys(errors).length) {
+      const previous = entries.find((item) => item.id === route.id)
+      entry = {
+        id: route.id || crypto.randomUUID(),
+        kind,
+        name,
+        amount,
+        renewDay,
+        startedMonth,
+        deactivatedOn: previous?.deactivatedOn || null,
+      }
+    }
+  } else {
+    const total = D.parseAmount(valueOf(form, panel, "[name=total]"))
+    const months = Number(valueOf(form, panel, "[name=months]"))
+    const startDate = valueOf(form, panel, "[name=start]")
+    if (total == null) errors.total = "Scrivi il costo totale."
+    if (!Number.isInteger(months) || months < 1 || months > 120) errors.months = "I mesi vanno da 1 a 120."
+    if (!isoDate(startDate)) errors.start = "Scegli la data del primo addebito."
+    if (!Object.keys(errors).length) {
+      entry = { id: route.id || crypto.randomUUID(), kind, name, total, months, startDate }
+    }
+  }
+  if (!entry) {
+    showErrors(form, errors)
+    ;[...form.querySelectorAll("[aria-invalid='true']")].find((el) => !el.closest("[hidden]"))?.focus()
+    status("Controlla i campi evidenziati.")
+    return
+  }
+  const index = entries.findIndex((item) => item.id === entry.id)
+  if (index >= 0) entries[index] = entry
+  else entries.push(entry)
+  persist()
+  dirty = false
+  status(route.mode === "edit" ? "Spesa aggiornata." : "Spesa aggiunta.")
+  const ym = entry.kind === "once" ? entry.date.slice(0, 7) : entry.kind === "plan" ? entry.startDate.slice(0, 7) : entry.startedMonth
+  go("#/mese/" + ym)
+}
+
+function showErrors(form, errors) {
+  form.querySelectorAll(".field").forEach((field) => {
+    const message = errors[field.dataset.field] || ""
+    const input = field.querySelector("input")
+    const note = field.querySelector(".error")
+    if (!input || !note) return
+    if (message && !field.closest("[hidden]")) {
+      input.setAttribute("aria-invalid", "true")
+      input.setAttribute("aria-describedby", note.id)
+      note.textContent = message
+    } else {
+      input.removeAttribute("aria-invalid")
+      note.textContent = ""
+    }
+  })
+}
+
+function removeEntry(route) {
+  const button = document.getElementById("delete")
+  if (button.dataset.armed !== "1") {
+    button.dataset.armed = "1"
+    button.textContent = "Elimina davvero"
+    return
+  }
+  entries = entries.filter((item) => item.id !== route.id)
+  persist()
+  dirty = false
+  status("Spesa eliminata.")
+  go("#/mese/" + route.ym)
+}
+
+function stopSub(id) {
+  const today = D.todayISO()
+  entries = entries.map((entry) => entry.id === id ? { ...entry, deactivatedOn: today } : entry)
+  persist()
+  armedId = null
+  status("Abbonamento interrotto.")
+  render()
+}
+
+function leave(route) {
+  if (dirty && !window.confirm("Ci sono modifiche non salvate. Vuoi uscire?")) return
+  dirty = false
+  go("#/mese/" + route.ym)
+}
+
+function bindDrag(panel, dim, route, reduce) {
+  const handle = panel.querySelector("[data-drag]")
+  let dragging = false
+  let startY = 0
+  let origin = 0
+  let lastY = 0
+  let lastT = 0
+  let velocity = 0
+  let moved = 0
+  let height = 1
+  let closeTimer = 0
+
+  function currentY() {
+    const transform = getComputedStyle(panel).transform
+    if (!transform || transform === "none") return 0
+    return new DOMMatrix(transform).m42
+  }
+
+  handle.addEventListener("pointerdown", (event) => {
+    window.clearTimeout(closeTimer)
+    dragging = true
+    moved = 0
+    origin = Math.max(0, currentY())
+    startY = event.clientY
+    lastY = event.clientY
+    lastT = performance.now()
+    velocity = 0
+    height = panel.getBoundingClientRect().height || 1
+    panel.style.transition = "none"
+    dim.style.transition = "none"
+    handle.setPointerCapture(event.pointerId)
+  })
+  handle.addEventListener("pointermove", (event) => {
+    if (!dragging) return
+    const dy = event.clientY - startY
+    moved = Math.max(moved, Math.abs(dy))
+    const y = Math.max(0, origin + dy)
+    const now = performance.now()
+    const dt = now - lastT
+    if (dt > 0) velocity = (event.clientY - lastY) / dt
+    lastY = event.clientY
+    lastT = now
+    panel.style.transform = "translateY(" + y + "px)"
+    dim.style.opacity = String(Math.max(0, 1 - y / height))
+  })
+  function finish() {
+    if (!dragging) return
+    dragging = false
+    const y = Math.max(0, origin + (lastY - startY))
+    const dismiss = y > height * 0.4 || velocity > 0.65
+    const duration = reduce ? "1ms" : "320ms"
+    panel.style.transition = "transform " + duration + " var(--ease-drawer)"
+    dim.style.transition = "opacity " + duration + " var(--ease-out)"
+    if (dismiss) {
+      panel.style.transform = "translateY(100%)"
+      dim.style.opacity = "0"
+      closeTimer = window.setTimeout(() => leave(route), reduce ? 0 : 300)
+    } else {
+      panel.style.transform = "translateY(0)"
+      dim.style.opacity = "1"
+    }
+  }
+  handle.addEventListener("pointerup", finish)
+  handle.addEventListener("pointercancel", finish)
+  handle.addEventListener("click", (event) => {
+    if (moved > 6) event.preventDefault()
+  })
+}
+
+function trapFocus(event, root) {
+  const nodes = [...root.querySelectorAll("button, a, input")].filter((el) => !el.closest("[hidden]") && !el.disabled)
+  if (!nodes.length) return
+  const first = nodes[0]
+  const last = nodes[nodes.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+window.addEventListener("hashchange", () => {
+  if (suppress) {
+    suppress = false
+    lastHash = location.hash
+    return
+  }
+  if (dirty) {
+    const ok = window.confirm("Ci sono modifiche non salvate. Vuoi uscire?")
+    if (!ok) {
+      suppress = true
+      location.hash = lastHash
+      return
+    }
+    dirty = false
+  }
+  lastHash = location.hash
+  render()
+})
+
+window.addEventListener("beforeunload", (event) => {
+  if (!dirty) return
+  event.preventDefault()
+  event.returnValue = ""
+})
+
+if (!location.hash) location.hash = "#/mese"
+else render()
