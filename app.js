@@ -278,8 +278,12 @@ function commitCard(id, name, detail) {
 }
 
 function subCard(entry) {
-  const next = D.nextRenewal(entry, D.todayISO())
-  const when = next ? "Rinnovo il " + D.dayLabel(next) : "Nessun altro rinnovo"
+  const next = typeof D.nextRenewal === "function" ? D.nextRenewal(entry, D.todayISO()) : undefined
+  const when = next
+    ? "Rinnovo il " + D.dayLabel(next)
+    : next === null
+      ? "Nessun altro rinnovo"
+      : "Rinnovo il " + entry.renewDay
   return commitCard(entry.id, entry.name, esc(when) + " · " + esc(D.formatEUR(entry.amount)))
 }
 
@@ -384,16 +388,19 @@ function render() {
   const samePage = key === viewKey
   if (!samePage || contentStale) {
     const saved = samePage ? { page: screen.scrollTop, ledger: screen.querySelector(".ledger")?.scrollTop || 0 } : null
-    document.getElementById("top").innerHTML = topHTML(route)
-    screen.innerHTML = route.name === "archivio"
+    const top = topHTML(route)
+    const body = route.name === "archivio"
       ? archiveHTML(route)
       : route.name === "impegni"
         ? commitmentsHTML()
         : route.name === "documento"
           ? documentHTML(route)
           : monthHTML(route)
+    const nav = navHTML(route)
+    document.getElementById("top").innerHTML = top
+    screen.innerHTML = body
     if (samePage) screen.querySelector(".moves")?.classList.add("quiet")
-    document.getElementById("nav").innerHTML = navHTML(route)
+    document.getElementById("nav").innerHTML = nav
     settleDock(dockIndexOf(route))
     viewKey = key
     contentStale = false
