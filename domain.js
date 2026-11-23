@@ -210,7 +210,7 @@
     const list = []
     for (let m = 0; m < 12; m += 1) {
       if (year > now.y) continue
-      if (year === now.y && m >= now.m) continue
+      if (year === now.y && m > now.m) continue
       list.push(ymOf(year, m))
     }
     return list

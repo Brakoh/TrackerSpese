@@ -12,6 +12,7 @@ const ICONS = {
   back: '<path d="M15 5.5 8 12l7 6.5"/>',
   download: '<path d="M12 4.5v10"/><path d="M8 11l4 4 4-4"/><path d="M5.5 19.5h13"/>',
   close: '<path d="M7 7l10 10M17 7 7 17"/>',
+  trash: '<path d="M5 7.5h14"/><path d="M9.5 7.5V5.8a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V7.5"/><path d="M7.2 7.5l.7 11.2a1 1 0 0 0 1 .8h6.2a1 1 0 0 0 1-.8l.7-11.2"/><path d="M10.2 11v5M13.8 11v5"/>',
 }
 
 let entries = load()
@@ -20,6 +21,7 @@ let dirty = false
 let lastHash = location.hash
 let sheetAbort = null
 let suppress = false
+let dockIndex = 0
 
 function icon(name) {
   return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + "</svg>"
@@ -121,17 +123,43 @@ function topHTML(route) {
   return '<a class="back" href="#/archivio/' + year + '">' + icon("back") + "<span>Archivio</span></a>" + pdf
 }
 
+function dockIndexOf(route) {
+  if (route.name === "archivio") return 1
+  if (route.name === "impegni") return 2
+  return 0
+}
+
 function navHTML(route) {
   const items = [
     ["mese", "Mese", "month"],
     ["archivio", "Archivio", "archive"],
     ["impegni", "Impegni", "commitments"],
   ]
-  return items.map(([id, label, glyph]) => {
+  const links = items.map(([id, label, glyph]) => {
     const current = route.name === id ? ' aria-current="page"' : ""
     const href = id === "archivio" ? "#/archivio/" + D.todayISO().slice(0, 4) : "#/" + id
     return '<a href="' + href + '"' + current + ' aria-label="' + label + '">' + icon(glyph) + "</a>"
   }).join("")
+  return '<span class="dock-mark" aria-hidden="true"></span>' + links
+}
+
+function settleDock(index) {
+  const mark = document.querySelector(".dock-mark")
+  if (!mark) return
+  const from = dockIndex
+  dockIndex = index
+  if (reduceMotion() || from === index) {
+    mark.style.transform = "translateX(" + (index * 100) + "%)"
+    return
+  }
+  mark.style.transition = "none"
+  mark.style.transform = "translateX(" + (from * 100) + "%)"
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      mark.style.transition = "transform 220ms var(--ease-in-out)"
+      mark.style.transform = "translateX(" + (index * 100) + "%)"
+    })
+  })
 }
 
 function monthHTML(route) {
@@ -173,11 +201,12 @@ function archiveHTML(route) {
   const months = D.pastMonths(year, today)
   const cards = months.map((ym) => {
     const total = D.totalOf(D.linesForMonth(entries, ym, today))
-    return '<a class="month-card" href="#/mese/' + ym + '"><span><strong>' + esc(D.monthName(ym)) + '</strong><span>' + esc(String(year)) + '</span></span><b>' + esc(D.formatEUR(total)) + "</b></a>"
+    const title = D.monthTitle(ym)
+    return '<div class="month-card"><a href="#/mese/' + ym + '"><span><strong>' + esc(D.monthName(ym)) + '</strong><span>' + esc(String(year)) + '</span></span><b>' + esc(D.formatEUR(total)) + '</b></a><i class="month-rule" aria-hidden="true"></i><button type="button" class="month-pdf" data-pdf="' + ym + '" aria-label="Scarica il PDF di ' + esc(title) + '">' + icon("download") + "</button></div>"
   }).join("")
   const body = months.length
-    ? '<div class="stack">' + cards + '</div><article class="year-total"><h2>Mesi chiusi del ' + esc(route.year) + "</h2><p>" + esc(D.formatEUR(months.reduce((sum, ym) => sum + D.totalOf(D.linesForMonth(entries, ym, today)), 0))) + "</p></article>"
-    : '<div class="empty"><p>I mesi chiusi del ' + esc(route.year) + " compariranno qui.</p></div>"
+    ? '<div class="stack">' + cards + '</div><article class="year-total"><h2>Totale del ' + esc(route.year) + "</h2><p>" + esc(D.formatEUR(months.reduce((sum, ym) => sum + D.totalOf(D.linesForMonth(entries, ym, today)), 0))) + "</p></article>"
+    : '<div class="empty"><p>I mesi del ' + esc(route.year) + " compariranno qui.</p></div>"
   return '<h1 class="page-title">Archivio</h1><figure class="banner"><img src="assets/img/archivio-mesi.jpg" alt="" width="1280" height="720"></figure><div class="years">' + chips + "</div>" + body
 }
 
@@ -237,10 +266,10 @@ function sheetHTML(route) {
       }).join("") + "</div>"
   const service = field("name", "Nome del servizio", input('id="service-name" name="name" value="' + esc(values.name) + '" list="nomi"') + listNames())
   const panels = service + panelOnce(values, kind) + panelSub(values, route, editing, kind) + panelPlan(values, kind)
-  const tools = editing
-    ? '<div class="sheet-tools"><button type="button" class="text-btn danger" id="delete">Elimina</button></div>'
-    : ""
-  return '<div class="overlay"><div class="dim" data-close></div><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><button type="button" class="handle" data-drag aria-label="Trascina per chiudere"><span></span></button><div class="sheet-head"><h2 id="sheet-title">' + title + '</h2><button type="button" class="top-action" data-close aria-label="Chiudi">' + icon("close") + '</button></div><form class="sheet-body" id="expense-form" data-kind="' + kind + '" novalidate>' + kinds + panels + '<button class="submit" type="submit">' + (editing ? "Salva" : "Aggiungi") + "</button>" + tools + "</form></section></div>"
+  const save = editing
+    ? '<div class="sheet-actions"><button type="button" class="trash" id="delete" aria-label="Elimina">' + icon("trash") + '</button><button class="submit" type="submit">Salva</button></div>'
+    : '<button class="submit" type="submit">Aggiungi</button>'
+  return '<div class="overlay"><div class="dim" data-close></div><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><button type="button" class="handle" data-drag aria-label="Trascina per chiudere"><span></span></button><div class="sheet-head"><h2 id="sheet-title">' + title + '</h2><button type="button" class="top-action" data-close aria-label="Chiudi">' + icon("close") + '</button></div><form class="sheet-body" id="expense-form" data-kind="' + kind + '" novalidate>' + kinds + panels + save + "</form></section></div>"
 }
 
 function blank(route) {
@@ -310,6 +339,7 @@ function render() {
       ? commitmentsHTML()
       : monthHTML(route)
   document.getElementById("nav").innerHTML = navHTML(route)
+  settleDock(dockIndexOf(route))
   const root = document.getElementById("sheet-root")
   const open = route.name === "mese" && route.mode
   root.innerHTML = open ? sheetHTML(route) : ""
@@ -327,6 +357,9 @@ function setInert(on) {
 
 function bindScreen(route) {
   document.getElementById("pdf")?.addEventListener("click", () => downloadMonth(route.ym))
+  document.querySelectorAll("[data-pdf]").forEach((button) => {
+    button.addEventListener("click", () => downloadMonth(button.dataset.pdf))
+  })
   document.querySelectorAll("[data-edit]").forEach((button) => {
     button.addEventListener("click", () => {
       go("#/mese/" + route.ym + "/modifica/" + button.dataset.edit)
@@ -628,8 +661,22 @@ function trapFocus(event, root) {
 }
 
 document.addEventListener("gesturestart", (event) => event.preventDefault())
+function canScroll(target) {
+  const ledger = target.closest(".ledger")
+  if (ledger) return ledger.scrollHeight > ledger.clientHeight + 1
+  const screen = target.closest(".screen")
+  if (screen && !screen.querySelector(":scope > .ledger")) return screen.scrollHeight > screen.clientHeight + 1
+  return false
+}
+
 document.addEventListener("touchmove", (event) => {
-  if (event.touches && event.touches.length > 1) event.preventDefault()
+  if (event.touches && event.touches.length > 1) {
+    event.preventDefault()
+    return
+  }
+  if (event.target.closest("[data-drag]")) return
+  if (canScroll(event.target)) return
+  event.preventDefault()
 }, { passive: false })
 
 window.addEventListener("hashchange", () => {
@@ -657,5 +704,6 @@ window.addEventListener("beforeunload", (event) => {
   event.returnValue = ""
 })
 
+dockIndex = dockIndexOf(parseRoute())
 if (!location.hash) location.hash = "#/mese"
 else render()

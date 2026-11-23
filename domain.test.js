@@ -57,7 +57,7 @@ assert.strictEqual(d.activeSubs([{ ...stopped, disdettaMonth: "2026-10" }], toda
 
 assert.deepStrictEqual(d.pastMonths(2026, today), [
   "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06",
-  "2026-07", "2026-08", "2026-09", "2026-10",
+  "2026-07", "2026-08", "2026-09", "2026-10", "2026-11",
 ])
 
 const pdf = d.buildMonthPdf("Spese novembre 2026", ["02 novembre  Pranzo  EUR 18,50"], "Totale EUR 18,50")

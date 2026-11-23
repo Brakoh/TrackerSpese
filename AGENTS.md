@@ -20,7 +20,7 @@ Tre tipi, distinti da come la cifra cade sui mesi:
 
 La schermata principale è il mese corrente: le spese che gli appartengono e l’aggiunta di nuove. Il totale somma tutto ciò che appartiene al mese, anche un rinnovo più avanti. Ogni riga mostra il giorno, così si distingue ciò che è già passato da ciò che arriva.
 
-Mesi trascorsi. Elenco con filtro per anno, da gennaio in alto all’ultimo mese chiuso in basso, totale di ogni mese, totale dell’anno in fondo. Un mese si riapre e si corregge. Se ne scarica un PDF con le spese elencate.
+Mesi trascorsi. Elenco con filtro per anno, da gennaio in alto fino al mese corrente in basso, totale di ogni mese, totale dell’anno in fondo. Un mese si riapre e si corregge. Ogni riga ha il download del PDF.
 
 Impegni attivi. Abbonamenti attivi, con la disdetta. Rateizzazioni attive, con la data di fine pagamento. L’app sull’iPhone resta in verticale e non si zooma.
 

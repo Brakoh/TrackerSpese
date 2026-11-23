@@ -18,6 +18,7 @@
   --danger: #9f1239;
   --line: #e4e4e7;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --shadow: 0 10px 24px rgba(22, 22, 22, 0.08);
   --safe-top: env(safe-area-inset-top);
@@ -31,17 +32,24 @@
 
 html, body {
   margin: 0;
-  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
   touch-action: manipulation;
 }
 
 body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
   background: var(--lime);
   color: var(--ink);
   font-family: Outfit, system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.45;
 }
+
+.stage { height: 100%; }
 
 @media (pointer: fine) {
   html { overscroll-behavior: none; }
@@ -108,12 +116,13 @@ img { max-width: 100%; }
 
 .phone {
   position: relative;
-  min-height: 100dvh;
-  height: 100dvh;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--paper);
   overflow: hidden;
+  touch-action: manipulation;
 }
 
 @media (min-width: 840px) and (hover: hover) {
@@ -206,7 +215,7 @@ img { max-width: 100%; }
   flex: 1;
   min-height: 0;
   overflow: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   padding: 4px calc(20px + var(--safe-right)) calc(112px + var(--safe-bottom)) calc(20px + var(--safe-left));
 }
 
@@ -220,9 +229,12 @@ img { max-width: 100%; }
   flex: 1;
   min-height: 0;
   overflow: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
+  touch-action: pan-y;
   margin-top: 18px;
 }
+
+.screen:not(:has(.ledger)) { touch-action: pan-y; }
 
 h1, h2 {
   margin: 0;
@@ -357,11 +369,11 @@ h2 {
 .ledger .moves,
 .ledger .empty { margin-top: 0; }
 
-.move, .month-card, .commit {
+.move, .month-card > a, .month-pdf, .commit, .trash {
   transition: transform 120ms var(--ease-out);
 }
 
-.move:active, .month-card:active, .commit:active, .actions a:active .bubble, .submit:active, .stop:active, .text-btn:active {
+.move:active, .month-card > a:active, .month-pdf:active, .commit:active, .actions a:active .bubble, .submit:active, .stop:active, .text-btn:active, .trash:active {
   transform: scale(0.97);
 }
 
@@ -387,7 +399,7 @@ h2 {
   flex-direction: column;
 }
 
-.month-card > span, .commit-row > div {
+.month-card a > span, .commit-row > div {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -491,16 +503,48 @@ h2 {
 .month-card {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   min-height: 68px;
-  padding: 14px 16px;
+  padding: 8px 8px 8px 16px;
   border-radius: 22px;
   background: #fff;
   color: inherit;
-  text-decoration: none;
   box-shadow: var(--shadow);
 }
+
+.month-card > a {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.month-rule {
+  width: 1px;
+  height: 28px;
+  flex: none;
+  background: var(--line);
+}
+
+.month-pdf {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.month-pdf svg { width: 20px; height: 20px; }
 
 .month-card span, .commit p { margin: 3px 0 0; }
 
@@ -601,19 +645,29 @@ h2 {
   z-index: 5;
 }
 
+.dock-mark {
+  position: absolute;
+  z-index: 0;
+  top: 6px;
+  bottom: 6px;
+  left: 6px;
+  width: calc((100% - 12px) / 3);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  pointer-events: none;
+}
+
 .dock a {
+  position: relative;
+  z-index: 1;
   display: grid;
   place-items: center;
   border-radius: 999px;
   color: rgba(255, 255, 255, 0.92);
   text-decoration: none;
-  transition: background-color 160ms var(--ease-out), color 160ms var(--ease-out);
 }
 
-.dock a[aria-current="page"] {
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
-}
+.dock a[aria-current="page"] { color: #fff; }
 
 .dock a:focus-visible { outline-color: var(--lime); }
 
@@ -636,12 +690,14 @@ h2 {
   left: 0;
   right: 0;
   bottom: 0;
-  max-height: min(92dvh, 100%);
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   background: #fff;
   border-radius: 28px 28px 0 0;
   box-shadow: 0 -16px 40px rgba(22, 22, 22, 0.18);
+  overflow: hidden;
+  touch-action: manipulation;
 }
 
 .sheet-head {
@@ -671,10 +727,14 @@ h2 {
 }
 
 .sheet-body {
-  overflow: auto;
-  overscroll-behavior: contain;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  touch-action: manipulation;
   padding: 0 calc(20px + var(--safe-right)) calc(18px + var(--safe-bottom)) calc(20px + var(--safe-left));
 }
+
+[data-panel] { min-width: 0; max-width: 100%; }
 
 .kinds { display: grid; gap: 8px; }
 
@@ -701,13 +761,20 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin-top: 14px;
 }
 
 .field span { font-weight: 600; font-size: 14px; }
 
 .field input {
+  display: block;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  -webkit-min-logical-width: 0;
   min-height: 48px;
   padding: 0 14px;
   border-radius: 14px;
@@ -727,9 +794,13 @@ h2 {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 48px;
+  min-height: 44px;
   margin-top: 16px;
+  font-size: 13.5px;
   font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .check input {
@@ -753,22 +824,43 @@ h2 {
   transition: transform 120ms var(--ease-out);
 }
 
-.sheet-tools {
+.sheet-actions {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 18px;
 }
+
+.sheet-actions .submit {
+  flex: 1;
+  width: auto;
+  margin-top: 0;
+}
+
+.trash {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: #fff1f2;
+  color: var(--danger);
+  cursor: pointer;
+  padding: 0;
+}
+
+.trash svg { width: 22px; height: 22px; }
 
 @media (prefers-reduced-motion: reduce) {
   .moves > li,
-  .move, .month-card, .commit, .bubble, .submit, .dock a {
+  .move, .month-card > a, .month-pdf, .commit, .bubble, .submit, .dock a, .dock-mark, .trash {
     animation: none;
     transition: none;
   }
 
-  .move:active, .month-card:active, .commit:active, .actions a:active .bubble, .submit:active {
+  .move:active, .month-card > a:active, .month-pdf:active, .commit:active, .actions a:active .bubble, .submit:active, .trash:active {
     transform: none;
   }
 }
