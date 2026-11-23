@@ -232,6 +232,7 @@ img { max-width: 100%; }
   overflow: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   margin-top: 18px;
 }
 
@@ -284,16 +285,26 @@ h2 {
 .hero-copy {
   position: relative;
   z-index: 1;
-  padding: 22px 20px 18px;
-  max-width: 68%;
+  padding: 22px 132px 18px 20px;
 }
 
 .hero-amount {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   font-size: clamp(1.9rem, 8vw, 2.6rem);
   font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-fee {
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  opacity: 0.72;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
@@ -302,8 +313,8 @@ h2 {
   z-index: 1;
   right: 16px;
   top: 16px;
-  bottom: 16px;
   width: 108px;
+  height: 108px;
   border-radius: 22px;
   overflow: hidden;
   background: #fff;
@@ -377,13 +388,16 @@ h2 {
   transition: transform 120ms var(--ease-out);
 }
 
-.move:active, .month-card > a:active, .month-pdf:active, .commit:active, .actions a:active .bubble, .submit:active, .stop:active, .text-btn:active, .trash:active {
+.month-card > a:active, .month-pdf:active, .commit:active, .actions a:active .bubble, .submit:active, .stop:active, .text-btn:active, .trash:active {
   transform: scale(0.97);
 }
+
+.move:active { transform: translateX(-8px); }
 
 .swipe {
   position: relative;
   overflow: hidden;
+  touch-action: pan-y;
 }
 
 .swipe-delete {

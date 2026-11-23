@@ -167,6 +167,7 @@ function monthHTML(route) {
   const today = D.todayISO()
   const lines = D.linesForMonth(entries, route.ym, today)
   const total = D.totalOf(lines)
+  const fee = lines.reduce((sum, line) => line.kind === "once" ? sum : sum + line.amount, 0)
   const ym = route.ym
   const actions = [
     ["nuova/once", "add", "Aggiungi"],
@@ -181,7 +182,7 @@ function monthHTML(route) {
       return '<li class="swipe"><button type="button" class="swipe-delete" data-ask="' + esc(line.id) + '" tabindex="-1" aria-hidden="true" aria-label="Elimina ' + esc(line.name) + '">' + icon("trash") + '</button><button type="button" class="move" data-edit="' + esc(line.id) + '" title="' + esc(line.name) + '"><span class="badge ' + line.kind + '">' + icon(line.kind) + '</span><span class="move-text"><span class="move-name">' + esc(line.name) + '</span><span class="move-meta">' + esc(meta(line)) + '</span></span><span class="move-amount">' + esc(D.formatEUR(line.amount)) + "</span></button></li>"
     }).join("") + "</ul>"
     : '<div class="empty"><img src="assets/img/mese-vuoto.jpg" alt="" width="1024" height="1024"><p>Nessuna spesa in ' + esc(D.monthName(ym).toLowerCase()) + ". Aggiungine una con i tasti qui sopra.</p></div>"
-  return '<article class="hero"><div class="hero-copy"><h1>' + esc(D.monthName(ym)) + '</h1><p class="hero-amount"><span class="sr">Totale del mese </span>' + esc(D.formatEUR(total)) + '</p></div><div class="hero-art"><img src="assets/img/hero-spesa.jpg" alt="" width="1024" height="1024" fetchpriority="high"></div></article><div class="actions">' + actions + '</div><div class="ledger">' + list + "</div>"
+  return '<article class="hero"><div class="hero-copy"><h1>' + esc(D.monthName(ym)) + '</h1><p class="hero-amount"><span class="sr">Totale del mese </span>' + esc(D.formatEUR(total)) + '</p><p class="hero-fee">Canone mensile: ' + esc(D.formatEUR(fee)) + "/mese</p></div><div class=\"hero-art\"><img src=\"assets/img/hero-spesa.jpg\" alt=\"\" width=\"1024\" height=\"1024\" fetchpriority=\"high\"></div></article><div class=\"actions\">" + actions + '</div><div class="ledger">' + list + "</div>"
 }
 
 function archiveHTML(route) {
@@ -721,9 +722,7 @@ function bindSwipes() {
       lastT = performance.now()
       velocity = 0
       face.dataset.swiped = ""
-      face.style.transition = "none"
-      origin = readX(face)
-      row.classList.add("is-dragging")
+      origin = 0
     })
     face.addEventListener("pointermove", (event) => {
       if (event.pointerId !== pointerId) return
@@ -733,6 +732,9 @@ function bindSwipes() {
         if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
         axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y"
         if (axis === "y") return
+        face.style.transition = "none"
+        origin = readX(face)
+        row.classList.add("is-dragging")
         face.setPointerCapture(event.pointerId)
         closeSwipes(row)
       }
