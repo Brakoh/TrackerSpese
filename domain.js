@@ -140,7 +140,8 @@
       if (viewed < entry.startedMonth) return null
       const { y, m } = parseYM(viewed)
       const date = chargeDate(y, m, entry.renewDay)
-      if (entry.deactivatedOn && date > entry.deactivatedOn) return null
+      const lastMonth = entry.disdettaMonth || (entry.deactivatedOn ? entry.deactivatedOn.slice(0, 7) : null)
+      if (lastMonth && viewed > lastMonth) return null
       return {
         id: entry.id,
         kind: "sub",
@@ -178,9 +179,14 @@
     return lines.reduce((sum, line) => sum + line.amount, 0)
   }
 
-  function activeSubs(entries) {
+  function activeSubs(entries, today) {
+    const ym = today.slice(0, 7)
     return entries
-      .filter((entry) => entry.kind === "sub" && !entry.deactivatedOn)
+      .filter((entry) => {
+        if (entry.kind !== "sub") return false
+        const lastMonth = entry.disdettaMonth || (entry.deactivatedOn ? entry.deactivatedOn.slice(0, 7) : null)
+        return !lastMonth || lastMonth >= ym
+      })
       .sort((a, b) => a.renewDay - b.renewDay || a.name.localeCompare(b.name, "it"))
   }
 
@@ -207,7 +213,7 @@
       if (year === now.y && m >= now.m) continue
       list.push(ymOf(year, m))
     }
-    return list.reverse()
+    return list
   }
 
   function buildMonthPdf(title, rows, totalLine) {

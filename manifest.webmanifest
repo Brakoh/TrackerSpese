@@ -3,6 +3,7 @@
   "short_name": "Spese",
   "start_url": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#F3F4F6",
   "theme_color": "#F3F4F6",
   "lang": "it"

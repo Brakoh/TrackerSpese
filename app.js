@@ -183,7 +183,7 @@ function archiveHTML(route) {
 
 function commitmentsHTML() {
   const today = D.todayISO()
-  const subs = D.activeSubs(entries)
+  const subs = D.activeSubs(entries, today)
   const plans = D.activePlans(entries, today)
   const subCards = subs.length
     ? subs.map((entry) => subCard(entry)).join("")
@@ -195,10 +195,12 @@ function commitmentsHTML() {
 }
 
 function subCard(entry) {
-  const armed = armedId === entry.id
-  const actions = armed
-    ? '<div class="confirm"><button type="button" class="stop" data-cancel>Annulla</button><button type="button" class="stop danger" data-stop="' + esc(entry.id) + '">Conferma</button></div><p>I mesi già addebitati restano.</p>'
-    : '<button type="button" class="stop" data-arm="' + esc(entry.id) + '">Interrompi</button>'
+  const disdetto = Boolean(entry.disdettaMonth || entry.deactivatedOn)
+  const actions = disdetto
+    ? "<p>Disdetto. Dal mese prossimo non si rinnova.</p>"
+    : armedId === entry.id
+      ? '<div class="confirm"><button type="button" class="stop" data-cancel>Annulla</button><button type="button" class="stop danger" data-stop="' + esc(entry.id) + '">Conferma</button></div><p>Questo mese resta. Dal mese prossimo non si rinnova.</p>'
+      : '<button type="button" class="stop" data-arm="' + esc(entry.id) + '">Ho disdetto</button>'
   return '<article class="commit"><div class="commit-row"><div><h3>' + esc(entry.name) + "</h3><p>Rinnovo il " + entry.renewDay + " · " + esc(D.formatEUR(entry.amount)) + '</p></div><a class="stop" href="#/mese/' + D.currentYM() + "/modifica/" + esc(entry.id) + '">Modifica</a></div>' + actions + "</article>"
 }
 
@@ -259,7 +261,7 @@ function valuesFrom(entry) {
     return { name: entry.name, amount: centsToField(entry.amount), date: entry.date, renewDay: "1", total: "", months: "", startDate: entry.date, startedMonth: entry.date.slice(0, 7) }
   }
   if (entry.kind === "sub") {
-    return { name: entry.name, amount: centsToField(entry.amount), date: D.todayISO(), renewDay: String(entry.renewDay), total: "", months: "", startDate: entry.startedMonth + "-01", startedMonth: entry.startedMonth }
+    return { name: entry.name, amount: centsToField(entry.amount), date: D.todayISO(), renewDay: String(entry.renewDay), total: "", months: "", startDate: entry.startedMonth + "-01", startedMonth: entry.startedMonth, disdetta: Boolean(entry.disdettaMonth || entry.deactivatedOn) }
   }
   return { name: entry.name, amount: "", date: entry.startDate, renewDay: "1", total: centsToField(entry.total), months: String(entry.months), startDate: entry.startDate, startedMonth: entry.startDate.slice(0, 7) }
 }
@@ -280,10 +282,13 @@ function panelSub(values, route, editing, kind) {
   const start = editing
     ? field("started", "Primo mese", input('id="started" name="started" type="month" value="' + esc(values.startedMonth) + '"'))
     : '<p class="hint">Entra da ' + esc(D.monthTitle(route.ym)) + " in avanti.</p>"
+  const disdetta = editing
+    ? '<label class="check"><input type="checkbox" name="disdetta"' + (values.disdetta ? " checked" : "") + ">Ho disdetto: dal mese prossimo non si rinnova</label>"
+    : ""
   return '<div data-panel="sub"' + (kind === "sub" ? "" : " hidden") + ">" +
     field("amount", "Tariffa mensile", input('id="amount-sub" name="amount" inputmode="decimal" placeholder="15,99" value="' + esc(values.amount) + '"')) +
     field("renew", "Giorno di rinnovo", input('id="renew" name="renew" inputmode="numeric" placeholder="28" value="' + esc(values.renewDay) + '"')) +
-    start + "</div>"
+    start + disdetta + "</div>"
 }
 
 function panelPlan(values, kind) {
@@ -454,6 +459,7 @@ function submitForm(form, route) {
     if (!/^\d{4}-\d{2}$/.test(startedMonth)) errors.started = "Scegli il primo mese."
     if (!Object.keys(errors).length) {
       const previous = entries.find((item) => item.id === route.id)
+      const wantsEnd = Boolean(panel.querySelector("[name=disdetta]")?.checked)
       entry = {
         id: route.id || crypto.randomUUID(),
         kind,
@@ -461,7 +467,8 @@ function submitForm(form, route) {
         amount,
         renewDay,
         startedMonth,
-        deactivatedOn: previous?.deactivatedOn || null,
+        disdettaMonth: wantsEnd ? (previous?.disdettaMonth || D.currentYM()) : null,
+        deactivatedOn: null,
       }
     }
   } else {
@@ -523,11 +530,11 @@ function removeEntry(route) {
 }
 
 function stopSub(id) {
-  const today = D.todayISO()
-  entries = entries.map((entry) => entry.id === id ? { ...entry, deactivatedOn: today } : entry)
+  const month = D.currentYM()
+  entries = entries.map((entry) => entry.id === id ? { ...entry, disdettaMonth: month, deactivatedOn: null } : entry)
   persist()
   armedId = null
-  status("Abbonamento interrotto.")
+  status("Disdetta registrata. Dal mese prossimo non si rinnova.")
   render()
 }
 
@@ -619,6 +626,11 @@ function trapFocus(event, root) {
     first.focus()
   }
 }
+
+document.addEventListener("gesturestart", (event) => event.preventDefault())
+document.addEventListener("touchmove", (event) => {
+  if (event.touches && event.touches.length > 1) event.preventDefault()
+}, { passive: false })
 
 window.addEventListener("hashchange", () => {
   if (suppress) {

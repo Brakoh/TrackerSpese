@@ -14,7 +14,7 @@ const sub = {
   startedMonth: "2026-01",
   deactivatedOn: null,
 }
-const stopped = { ...sub, id: "x", deactivatedOn: "2026-11-10", name: "Palestra" }
+const stopped = { ...sub, id: "x", disdettaMonth: "2026-11", name: "Palestra" }
 const plan = {
   id: "p",
   kind: "plan",
@@ -32,10 +32,10 @@ assert.strictEqual(d.parseAmount("15,9"), 1590)
 assert.strictEqual(d.parseAmount("0"), null)
 
 const november = d.linesForMonth([once, later, sub, stopped, plan], "2026-11", today)
-assert.strictEqual(november.length, 4)
+assert.strictEqual(november.length, 5)
 assert.ok(november.find((line) => line.id === "l" && line.upcoming))
 assert.ok(november.find((line) => line.id === "s" && line.date === "2026-11-30"))
-assert.ok(!november.find((line) => line.id === "x"))
+assert.ok(november.find((line) => line.id === "x"))
 const phone = november.find((line) => line.id === "p")
 assert.strictEqual(phone.amount, 33333)
 assert.strictEqual(phone.index, 1)
@@ -50,12 +50,14 @@ assert.strictEqual(d.planEnd(plan), "2026-12-31")
 assert.strictEqual(d.linesForMonth([plan], "2027-01", today).length, 0)
 assert.strictEqual(d.linesForMonth([sub], "2025-12", today).length, 0)
 
-const kept = { ...stopped, deactivatedOn: "2026-11-30" }
-assert.ok(d.linesForMonth([kept], "2026-11", today).length === 1)
+assert.strictEqual(d.linesForMonth([stopped], "2026-12", today).length, 0)
+assert.strictEqual(d.linesForMonth([stopped], "2026-10", today).length, 1)
+assert.deepStrictEqual(d.activeSubs([stopped, sub], today).map((entry) => entry.name), ["Netflix", "Palestra"])
+assert.strictEqual(d.activeSubs([{ ...stopped, disdettaMonth: "2026-10" }], today).length, 0)
 
 assert.deepStrictEqual(d.pastMonths(2026, today), [
-  "2026-10", "2026-09", "2026-08", "2026-07", "2026-06", "2026-05",
-  "2026-04", "2026-03", "2026-02", "2026-01",
+  "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06",
+  "2026-07", "2026-08", "2026-09", "2026-10",
 ])
 
 const pdf = d.buildMonthPdf("Spese novembre 2026", ["02 novembre  Pranzo  EUR 18,50"], "Totale EUR 18,50")
