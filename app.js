@@ -629,11 +629,18 @@ function bindSheet(route) {
   }
   bindDrag(panel, dim, route, reduce)
   root.querySelectorAll("[data-close]").forEach((el) => el.addEventListener("click", () => leave(route), { signal }))
-  form.addEventListener("input", () => { dirty = true }, { signal })
+  const markDirty = (event) => {
+    if (event.target.name === "kind") return
+    dirty = true
+  }
+  form.addEventListener("input", markDirty, { signal })
   form.addEventListener("change", (event) => {
-    if (event.target.name !== "kind") return
-    syncPanels(form, reduceMotion() ? "fade" : true)
-    showErrors(form, {})
+    if (event.target.name === "kind") {
+      syncPanels(form, reduceMotion() ? "fade" : true)
+      showErrors(form, {})
+      return
+    }
+    markDirty(event)
   }, { signal })
   form.addEventListener("submit", (event) => {
     event.preventDefault()
