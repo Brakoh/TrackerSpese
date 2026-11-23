@@ -19,6 +19,7 @@ const ICONS = {
 let entries = load()
 let dirty = false
 let viewKey = ""
+let contentStale = true
 let lastHash = location.hash
 let sheetAbort = null
 let suppress = false
@@ -64,6 +65,7 @@ function isoDate(value) {
 
 function persist() {
   localStorage.setItem(KEY, JSON.stringify({ entries }))
+  contentStale = true
 }
 
 function status(message) {
@@ -89,7 +91,6 @@ function parseRoute() {
   }
   if (top === "documento") {
     const ym = /^\d{4}-\d{2}$/.test(parts[1] || "") ? parts[1] : current
-    if (ym >= current) return { name: "mese", ym: current }
     return { name: "documento", ym }
   }
   let cursor = 1
@@ -156,16 +157,16 @@ function topHTML(route) {
 }
 
 function dockIndexOf(route) {
-  if (route.name === "archivio" || route.name === "documento") return 1
-  if (route.name === "impegni") return 2
+  if (route.name === "impegni") return 1
+  if (route.name === "archivio" || route.name === "documento") return 2
   return 0
 }
 
 function navHTML(route) {
   const items = [
     ["mese", "Mese", "month"],
-    ["archivio", "Documenti", "archive"],
     ["impegni", "Fatturazioni ricorrenti", "commitments"],
+    ["archivio", "Documenti", "archive"],
   ]
   const links = items.map(([id, label, glyph]) => {
     const here = route.name === id || (id === "archivio" && route.name === "documento")
@@ -236,11 +237,11 @@ function archiveHTML(route) {
   const cards = months.map((ym) => {
     const total = D.totalOf(D.linesForMonth(entries, ym, today))
     const title = D.monthTitle(ym)
-    const href = ym === D.currentYM() ? "#/mese" : "#/documento/" + ym
+    const href = "#/documento/" + ym
     return '<div class="month-card"><a href="' + href + '"><span><strong>' + esc(D.monthName(ym)) + '</strong><span>' + esc(String(year)) + '</span></span></a><b>' + esc(D.formatEUR(total)) + '</b><i class="month-rule" aria-hidden="true"></i><button type="button" class="month-pdf" data-pdf="' + ym + '" aria-label="Scarica il PDF di ' + esc(title) + '">' + icon("download") + "</button></div>"
   }).join("")
   const body = months.length
-    ? '<div class="stack">' + cards + '</div><article class="year-total"><h2>Totale del ' + esc(route.year) + "</h2><p>" + esc(D.formatEUR(months.reduce((sum, ym) => sum + D.totalOf(D.linesForMonth(entries, ym, today)), 0))) + "</p></article>"
+    ? '<div class="stack">' + cards + '</div><article class="year-total"><span>Totale del ' + esc(route.year) + "</span><b>" + esc(D.formatEUR(months.reduce((sum, ym) => sum + D.totalOf(D.linesForMonth(entries, ym, today)), 0))) + "</b></article>"
     : '<div class="empty"><p>I mesi del ' + esc(route.year) + " compariranno qui.</p></div>"
   return '<figure class="banner"><img src="assets/img/archivio-mesi.jpg" alt="" width="1280" height="720"></figure><div class="years">' + chips + "</div>" + body
 }
@@ -378,30 +379,34 @@ function render() {
   const route = parseRoute()
   const key = route.name === "archivio" ? "archivio/" + route.year : route.name === "documento" ? "documento/" + route.ym : route.name
   const screen = document.getElementById("contenuto")
-  const keep = key === viewKey
-  const saved = keep ? { page: screen.scrollTop, ledger: screen.querySelector(".ledger")?.scrollTop || 0 } : null
-  document.getElementById("top").innerHTML = topHTML(route)
-  screen.innerHTML = route.name === "archivio"
-    ? archiveHTML(route)
-    : route.name === "impegni"
-      ? commitmentsHTML()
-      : route.name === "documento"
-        ? documentHTML(route)
-        : monthHTML(route)
-  document.getElementById("nav").innerHTML = navHTML(route)
-  settleDock(dockIndexOf(route))
+  const samePage = key === viewKey
+  if (!samePage || contentStale) {
+    const saved = samePage ? { page: screen.scrollTop, ledger: screen.querySelector(".ledger")?.scrollTop || 0 } : null
+    document.getElementById("top").innerHTML = topHTML(route)
+    screen.innerHTML = route.name === "archivio"
+      ? archiveHTML(route)
+      : route.name === "impegni"
+        ? commitmentsHTML()
+        : route.name === "documento"
+          ? documentHTML(route)
+          : monthHTML(route)
+    if (samePage) screen.querySelector(".moves")?.classList.add("quiet")
+    document.getElementById("nav").innerHTML = navHTML(route)
+    settleDock(dockIndexOf(route))
+    viewKey = key
+    contentStale = false
+    if (saved) {
+      screen.scrollTop = saved.page
+      const ledger = screen.querySelector(".ledger")
+      if (ledger) ledger.scrollTop = saved.ledger
+    } else screen.scrollTop = 0
+    bindScreen(route)
+  }
   const root = document.getElementById("sheet-root")
   const markup = route.mode ? sheetHTML(route) : ""
   root.innerHTML = markup
   setInert(Boolean(markup))
-  bindScreen(route)
   if (markup) bindSheet(route)
-  viewKey = key
-  if (saved) {
-    screen.scrollTop = saved.page
-    const ledger = screen.querySelector(".ledger")
-    if (ledger) ledger.scrollTop = saved.ledger
-  } else screen.scrollTop = 0
 }
 
 function setInert(on) {

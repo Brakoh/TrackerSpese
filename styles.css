@@ -146,10 +146,20 @@ img { max-width: 100%; }
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 56px;
-  padding: calc(10px + var(--safe-top)) calc(20px + var(--safe-right)) 8px calc(20px + var(--safe-left));
+  height: calc(64px + var(--safe-top));
+  padding: var(--safe-top) calc(20px + var(--safe-right)) 0 calc(20px + var(--safe-left));
   background: var(--paper);
   z-index: 4;
+  flex: none;
+}
+
+.brand,
+.back {
+  height: 44px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
 }
 
 .brand {
@@ -157,9 +167,7 @@ img { max-width: 100%; }
   align-items: center;
   gap: 10px;
   min-width: 0;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  white-space: nowrap;
 }
 
 .mark {
@@ -186,11 +194,8 @@ img { max-width: 100%; }
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 44px;
   padding: 0 4px 0 0;
   color: var(--ink);
-  font-weight: 600;
-  letter-spacing: -0.02em;
   text-decoration: none;
 }
 
@@ -218,7 +223,10 @@ img { max-width: 100%; }
   overflow: auto;
   overscroll-behavior: none;
   padding: 4px calc(20px + var(--safe-right)) calc(112px + var(--safe-bottom)) calc(20px + var(--safe-left));
+  scrollbar-width: none;
 }
+
+.screen::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
 .screen:has(.ledger) {
   display: flex;
@@ -517,6 +525,8 @@ h2 {
 .moves > li:nth-child(8) { animation-delay: 196ms; }
 .moves > li:nth-child(n + 9) { animation: none; }
 
+.moves.quiet > li { animation: none; }
+
 @keyframes rise {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
@@ -614,18 +624,28 @@ h2 {
 .month-card span, .commit p { margin: 3px 0 0; }
 
 .year-total {
-  margin-top: 16px;
-  padding: 18px 18px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 20px 18px;
   border-radius: 28px;
   background: var(--lime);
   color: var(--lime-ink);
 }
 
-.year-total p {
-  margin: 8px 0 0;
-  font-size: clamp(1.8rem, 7vw, 2.3rem);
+.year-total span {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.year-total b {
+  font-size: 1.85rem;
   font-weight: 600;
   letter-spacing: -0.03em;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
@@ -672,6 +692,7 @@ h2 {
   display: grid;
   place-items: center;
   color: var(--ink);
+  opacity: 0.75;
   pointer-events: none;
 }
 

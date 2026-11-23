@@ -20,7 +20,7 @@ Tre tipi, distinti da come la cifra cade sui mesi:
 
 La schermata principale è solo il mese corrente: le spese che gli appartengono e l’aggiunta di nuove. Il totale somma tutto ciò che appartiene al mese, anche un rinnovo più avanti. Ogni riga mostra il giorno, così si distingue ciò che è già passato da ciò che arriva. Una spesa nuova, anche se è iniziata mesi fa, riporta al mese corrente.
 
-Documenti. Elenco con filtro per anno, da gennaio in alto fino al mese corrente in basso, totale di ogni mese, totale dell’anno in fondo. Il mese corrente riapre la schermata principale. Un mese già trascorso apre un rendiconto in sola lettura. Ogni riga ha il download del PDF.
+Documenti. Elenco con filtro per anno, da gennaio in alto fino al mese corrente in basso, totale di ogni mese, totale dell’anno in fondo. Ogni mese, compreso quello corrente, apre un rendiconto in sola lettura. Ogni riga ha il download del PDF.
 
 Fatturazioni ricorrenti. Abbonamenti attivi e rateizzazioni attive. La scheda di modifica si apre sopra la pagina da cui parte e, chiusa, riporta lì. La disdetta sta nella modifica dell’abbonamento. L’app sull’iPhone resta in verticale e non si zooma.
 
