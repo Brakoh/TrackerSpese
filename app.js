@@ -138,8 +138,8 @@ function meta(line) {
   return D.dayLabel(line.date) + " · " + kindLabel(line) + " · " + when
 }
 
-function brand(label, long) {
-  return '<div class="brand' + (long ? " long" : "") + '"><span class="mark" aria-hidden="true"></span> ' + label + "</div>"
+function brand(label) {
+  return '<div class="brand"><span class="mark" aria-hidden="true"></span> ' + label + "</div>"
 }
 
 function pdfButton(ym) {
@@ -151,7 +151,7 @@ function topHTML(route) {
     return '<a class="back" href="#/archivio/' + route.ym.slice(0, 4) + '">' + icon("back") + "<span>Documenti</span></a>" + pdfButton(route.ym)
   }
   if (route.name === "archivio") return brand("Documenti")
-  if (route.name === "impegni") return brand("Fatturazioni ricorrenti", true)
+  if (route.name === "impegni") return brand("Fatturazioni ricorrenti")
   return brand("Spese") + pdfButton(D.currentYM())
 }
 
