@@ -561,7 +561,7 @@ h2 {
 .filter-rule {
   height: 1px;
   margin: 12px 2px;
-  background: var(--ink);
+  background: var(--line);
   flex: none;
 }
 
