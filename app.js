@@ -627,16 +627,17 @@ function askDelete(id, route) {
   document.getElementById("nav").inert = true
   document.getElementById("sheet-root").inert = true
   if (!reduce) {
+    const travel = confirmTravel(pop, card)
     pop.style.opacity = "0"
     card.style.opacity = "0"
-    card.style.transform = "scale(0.96)"
+    card.style.transform = "translateY(" + travel + "px) scale(0.9)"
     requestAnimationFrame(() => {
-      pop.style.transition = "opacity 200ms var(--ease-out)"
-      card.style.transition = "opacity 200ms var(--ease-out), transform 200ms var(--ease-out)"
+      pop.style.transition = "opacity 250ms var(--ease-out)"
+      card.style.transition = "opacity 250ms var(--ease-out), transform 250ms var(--ease-out)"
       requestAnimationFrame(() => {
         pop.style.opacity = "1"
         card.style.opacity = "1"
-        card.style.transform = "none"
+        card.style.transform = "translateY(0px) scale(1)"
       })
     })
   }
@@ -678,12 +679,17 @@ function closeConfirm(done) {
     return
   }
   const card = pop.querySelector(".confirm-card")
-  pop.style.transition = "opacity 160ms var(--ease-out)"
-  card.style.transition = "opacity 160ms var(--ease-out), transform 160ms var(--ease-out)"
+  const travel = confirmTravel(pop, card)
+  pop.style.transition = "opacity 200ms var(--ease-out)"
+  card.style.transition = "opacity 200ms var(--ease-out), transform 200ms var(--ease-out)"
   pop.style.opacity = "0"
   card.style.opacity = "0"
-  card.style.transform = "scale(0.98)"
+  card.style.transform = "translateY(" + travel + "px) scale(0.9)"
   card.addEventListener("transitionend", release, { once: true })
+}
+
+function confirmTravel(pop, card) {
+  return Math.max(0, Math.round(pop.clientHeight / 2 - card.offsetHeight * 0.45))
 }
 
 const REVEAL = 84
