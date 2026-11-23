@@ -179,6 +179,21 @@
     return lines.reduce((sum, line) => sum + line.amount, 0)
   }
 
+  function nextRenewal(entry, today) {
+    const todayYM = today.slice(0, 7)
+    let ym = entry.startedMonth > todayYM ? entry.startedMonth : todayYM
+    let parts = parseYM(ym)
+    let date = chargeDate(parts.y, parts.m, entry.renewDay)
+    if (date < today) {
+      ym = addMonths(ym, 1)
+      parts = parseYM(ym)
+      date = chargeDate(parts.y, parts.m, entry.renewDay)
+    }
+    const lastMonth = entry.disdettaMonth || (entry.deactivatedOn ? entry.deactivatedOn.slice(0, 7) : null)
+    if (lastMonth && ym > lastMonth) return null
+    return date
+  }
+
   function activeSubs(entries, today) {
     const ym = today.slice(0, 7)
     return entries
@@ -320,6 +335,7 @@ function pdfEscape(value) {
     planEnd,
     linesForMonth,
     totalOf,
+    nextRenewal,
     activeSubs,
     activePlans,
     planProgress,

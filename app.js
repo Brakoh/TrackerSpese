@@ -278,7 +278,9 @@ function commitCard(id, name, detail) {
 }
 
 function subCard(entry) {
-  return commitCard(entry.id, entry.name, "Rinnovo il " + entry.renewDay + " · " + esc(D.formatEUR(entry.amount)))
+  const next = D.nextRenewal(entry, D.todayISO())
+  const when = next ? "Rinnovo il " + D.dayLabel(next) : "Nessun altro rinnovo"
+  return commitCard(entry.id, entry.name, esc(when) + " · " + esc(D.formatEUR(entry.amount)))
 }
 
 function planCard(entry, today) {
