@@ -22,6 +22,7 @@ let lastHash = location.hash
 let sheetAbort = null
 let suppress = false
 let dockIndex = 0
+let confirming = false
 
 function icon(name) {
   return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + "</svg>"
@@ -177,7 +178,7 @@ function monthHTML(route) {
   }).join("")
   const list = lines.length
     ? '<ul class="moves">' + lines.map((line) => {
-      return '<li><button type="button" class="move" data-edit="' + esc(line.id) + '" title="' + esc(line.name) + '"><span class="badge ' + line.kind + '">' + icon(line.kind) + '</span><span class="move-text"><span class="move-name">' + esc(line.name) + '</span><span class="move-meta">' + esc(meta(line)) + '</span></span><span class="move-amount">' + esc(D.formatEUR(line.amount)) + "</span></button></li>"
+      return '<li class="swipe"><button type="button" class="swipe-delete" data-ask="' + esc(line.id) + '" tabindex="-1" aria-hidden="true" aria-label="Elimina ' + esc(line.name) + '">' + icon("trash") + '</button><button type="button" class="move" data-edit="' + esc(line.id) + '" title="' + esc(line.name) + '"><span class="badge ' + line.kind + '">' + icon(line.kind) + '</span><span class="move-text"><span class="move-name">' + esc(line.name) + '</span><span class="move-meta">' + esc(meta(line)) + '</span></span><span class="move-amount">' + esc(D.formatEUR(line.amount)) + "</span></button></li>"
     }).join("") + "</ul>"
     : '<div class="empty"><img src="assets/img/mese-vuoto.jpg" alt="" width="1024" height="1024"><p>Nessuna spesa in ' + esc(D.monthName(ym).toLowerCase()) + ". Aggiungine una con i tasti qui sopra.</p></div>"
   return '<article class="hero"><div class="hero-copy"><h1>' + esc(D.monthName(ym)) + '</h1><p class="hero-amount"><span class="sr">Totale del mese </span>' + esc(D.formatEUR(total)) + '</p></div><div class="hero-art"><img src="assets/img/hero-spesa.jpg" alt="" width="1024" height="1024" fetchpriority="high"></div></article><div class="actions">' + actions + '</div><div class="ledger">' + list + "</div>"
@@ -362,9 +363,22 @@ function bindScreen(route) {
   })
   document.querySelectorAll("[data-edit]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (button.dataset.swiped === "1") {
+        button.dataset.swiped = ""
+        return
+      }
+      const row = button.closest(".swipe")
+      if (row?.classList.contains("is-open")) {
+        settleFace(button, 0, 0)
+        return
+      }
       go("#/mese/" + route.ym + "/modifica/" + button.dataset.edit)
     })
   })
+  document.querySelectorAll("[data-ask]").forEach((button) => {
+    button.addEventListener("click", () => askDelete(button.dataset.ask, route))
+  })
+  bindSwipes()
   document.querySelectorAll("[data-arm]").forEach((button) => {
     button.addEventListener("click", () => {
       armedId = button.dataset.arm
@@ -435,8 +449,9 @@ function bindSheet(route) {
     event.preventDefault()
     submitForm(form, route)
   }, { signal })
-  document.getElementById("delete")?.addEventListener("click", () => removeEntry(route), { signal })
+  document.getElementById("delete")?.addEventListener("click", () => askDelete(route.id, route), { signal })
   document.addEventListener("keydown", (event) => {
+    if (confirming) return
     if (event.key === "Escape") leave(route)
     if (event.key === "Tab") trapFocus(event, root)
   }, { signal })
@@ -550,18 +565,208 @@ function showErrors(form, errors) {
   })
 }
 
-function removeEntry(route) {
-  const button = document.getElementById("delete")
-  if (button.dataset.armed !== "1") {
-    button.dataset.armed = "1"
-    button.textContent = "Elimina davvero"
+function deleteCopy(entry) {
+  if (entry.kind === "sub") return "L'abbonamento sparisce da questo mese e da tutti gli altri in cui compare, passati e futuri."
+  if (entry.kind === "plan") return "La rateizzazione sparisce da questo mese e da ogni mese in cui è divisa."
+  return "Questa spesa sparisce da questo mese. L'eliminazione è definitiva."
+}
+
+function askDelete(id, route) {
+  const entry = entries.find((item) => item.id === id)
+  if (!entry || confirming) return
+  confirming = true
+  const host = document.getElementById("confirm-root")
+  host.innerHTML = '<div class="confirm-pop"><div class="confirm-dim" data-confirm-cancel></div><div class="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-copy"><h2 id="confirm-title">Eliminare ' + esc(entry.name) + '?</h2><p id="confirm-copy">' + esc(deleteCopy(entry)) + '</p><div class="confirm-actions"><button type="button" class="ghost" data-confirm-cancel>Annulla</button><button type="button" class="danger" data-confirm-yes>Elimina</button></div></div></div>'
+  const pop = host.querySelector(".confirm-pop")
+  const card = host.querySelector(".confirm-card")
+  const reduce = reduceMotion()
+  document.getElementById("top").inert = true
+  document.getElementById("contenuto").inert = true
+  document.getElementById("nav").inert = true
+  document.getElementById("sheet-root").inert = true
+  if (!reduce) {
+    pop.style.opacity = "0"
+    card.style.opacity = "0"
+    card.style.transform = "scale(0.96)"
+    requestAnimationFrame(() => {
+      pop.style.transition = "opacity 200ms var(--ease-out)"
+      card.style.transition = "opacity 200ms var(--ease-out), transform 200ms var(--ease-out)"
+      requestAnimationFrame(() => {
+        pop.style.opacity = "1"
+        card.style.opacity = "1"
+        card.style.transform = "none"
+      })
+    })
+  }
+  const cancel = host.querySelector(".ghost")
+  cancel.focus()
+  const finish = (remove) => {
+    closeConfirm(() => {
+      if (!remove) return
+      entries = entries.filter((item) => item.id !== id)
+      persist()
+      dirty = false
+      status("Spesa eliminata.")
+      go("#/mese/" + route.ym)
+    })
+  }
+  host.querySelectorAll("[data-confirm-cancel]").forEach((el) => el.addEventListener("click", () => finish(false)))
+  host.querySelector("[data-confirm-yes]").addEventListener("click", () => finish(true))
+  host.querySelector(".confirm-card").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault()
+      finish(false)
+    }
+    if (event.key === "Tab") trapFocus(event, card)
+  })
+}
+
+function closeConfirm(done) {
+  const pop = document.querySelector(".confirm-pop")
+  const release = () => {
+    document.getElementById("confirm-root").innerHTML = ""
+    confirming = false
+    const sheet = Boolean(document.querySelector(".sheet"))
+    setInert(sheet)
+    document.getElementById("sheet-root").inert = false
+    if (done) done()
+  }
+  if (!pop || reduceMotion()) {
+    release()
     return
   }
-  entries = entries.filter((item) => item.id !== route.id)
-  persist()
-  dirty = false
-  status("Spesa eliminata.")
-  go("#/mese/" + route.ym)
+  const card = pop.querySelector(".confirm-card")
+  pop.style.transition = "opacity 160ms var(--ease-out)"
+  card.style.transition = "opacity 160ms var(--ease-out), transform 160ms var(--ease-out)"
+  pop.style.opacity = "0"
+  card.style.opacity = "0"
+  card.style.transform = "scale(0.98)"
+  card.addEventListener("transitionend", release, { once: true })
+}
+
+const REVEAL = 84
+
+function readX(el) {
+  const transform = getComputedStyle(el).transform
+  if (!transform || transform === "none") return 0
+  return new DOMMatrix(transform).m41
+}
+
+function settleFace(face, dest, velocity) {
+  const row = face.closest(".swipe")
+  const from = readX(face)
+  const token = String(Number(face.dataset.settle || 0) + 1)
+  face.dataset.settle = token
+  face.style.transition = "none"
+  face.style.transform = "translateX(" + from + "px)"
+  row.classList.toggle("is-open", dest !== 0)
+  const bin = row.querySelector(".swipe-delete")
+  if (dest === 0) {
+    bin.tabIndex = -1
+    bin.setAttribute("aria-hidden", "true")
+  } else {
+    bin.tabIndex = 0
+    bin.removeAttribute("aria-hidden")
+  }
+  if (reduceMotion()) {
+    if (dest === 0) {
+      face.style.transition = ""
+      face.style.transform = ""
+    } else face.style.transform = "translateX(" + dest + "px)"
+    return
+  }
+  const speed = Math.max(Math.abs(velocity || 0), 0.45)
+  const duration = Math.round(Math.min(280, Math.max(140, Math.abs(dest - from) / speed)))
+  requestAnimationFrame(() => {
+    if (face.dataset.settle !== token) return
+    face.style.transition = "transform " + duration + "ms var(--ease-drawer)"
+    face.style.transform = dest === 0 ? "translateX(0px)" : "translateX(" + dest + "px)"
+  })
+  if (dest === 0) {
+    face.addEventListener("transitionend", () => {
+      if (face.dataset.settle !== token || row.classList.contains("is-open")) return
+      face.style.transition = ""
+      face.style.transform = ""
+    }, { once: true })
+  }
+}
+
+function closeSwipes(except) {
+  document.querySelectorAll(".swipe.is-open").forEach((row) => {
+    if (row === except) return
+    settleFace(row.querySelector(".move"), 0, 0)
+  })
+}
+
+function bindSwipes() {
+  const ledger = document.querySelector(".ledger")
+  ledger?.addEventListener("scroll", () => closeSwipes(), { passive: true })
+  document.querySelectorAll(".swipe").forEach((row) => {
+    const face = row.querySelector(".move")
+    let pointerId = null
+    let startX = 0
+    let startY = 0
+    let origin = 0
+    let axis = ""
+    let lastX = 0
+    let lastT = 0
+    let velocity = 0
+    face.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return
+      pointerId = event.pointerId
+      startX = event.clientX
+      startY = event.clientY
+      axis = ""
+      lastX = event.clientX
+      lastT = performance.now()
+      velocity = 0
+      face.dataset.swiped = ""
+      face.style.transition = "none"
+      origin = readX(face)
+      row.classList.add("is-dragging")
+    })
+    face.addEventListener("pointermove", (event) => {
+      if (event.pointerId !== pointerId) return
+      const dx = event.clientX - startX
+      const dy = event.clientY - startY
+      if (!axis) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
+        axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y"
+        if (axis === "y") return
+        face.setPointerCapture(event.pointerId)
+        closeSwipes(row)
+      }
+      if (axis !== "x") return
+      face.dataset.swiped = "1"
+      const now = performance.now()
+      const dt = now - lastT
+      if (dt > 0 && dt < 60) velocity = (event.clientX - lastX) / dt
+      else velocity *= 0.4
+      lastX = event.clientX
+      lastT = now
+      let x = origin + dx
+      if (x > 0) x *= 0.2
+      else if (x < -REVEAL) x = -REVEAL + (x + REVEAL) * 0.2
+      face.style.transform = "translateX(" + x + "px)"
+    })
+    const end = (event) => {
+      if (event.pointerId !== pointerId) return
+      pointerId = null
+      row.classList.remove("is-dragging")
+      if (axis !== "x") {
+        if (!row.classList.contains("is-open")) {
+          face.style.transition = ""
+          face.style.transform = ""
+        }
+        return
+      }
+      const x = readX(face)
+      const dest = velocity > 0.45 ? 0 : x < -REVEAL * 0.4 || velocity < -0.45 ? -REVEAL : 0
+      settleFace(face, dest, velocity)
+    }
+    face.addEventListener("pointerup", end)
+    face.addEventListener("pointercancel", end)
+  })
 }
 
 function stopSub(id) {
