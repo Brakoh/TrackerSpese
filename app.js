@@ -838,6 +838,16 @@ function confirmTravel(pop, card) {
 
 const REVEAL = 84
 
+function deleteScale(x) {
+  const t = Math.min(1, Math.max(0, -x / REVEAL))
+  const eased = 1 - Math.pow(1 - t, 3)
+  return 0.18 + 0.82 * eased
+}
+
+function placeBin(bin, scale) {
+  bin.style.transform = "translateY(-50%) scale(" + scale + ")"
+}
+
 function readX(el) {
   const transform = getComputedStyle(el).transform
   if (!transform || transform === "none") return 0
@@ -852,7 +862,9 @@ function settleFace(face, dest, velocity) {
   face.style.transition = "none"
   face.style.transform = "translateX(" + from + "px)"
   row.classList.toggle("is-open", dest !== 0)
+  row.classList.toggle("is-settling", dest === 0 && Math.abs(from) >= 0.5)
   const bin = row.querySelector(".swipe-delete")
+  const endScale = dest === 0 ? 0.18 : 1
   if (dest === 0) {
     bin.tabIndex = -1
     bin.setAttribute("aria-hidden", "true")
@@ -861,24 +873,34 @@ function settleFace(face, dest, velocity) {
     bin.removeAttribute("aria-hidden")
   }
   if (reduceMotion()) {
+    row.classList.remove("is-settling")
+    placeBin(bin, endScale)
     if (dest === 0) {
       face.style.transition = ""
       face.style.transform = ""
+      bin.style.transition = ""
     } else face.style.transform = "translateX(" + dest + "px)"
     return
   }
   const speed = Math.max(Math.abs(velocity || 0), 0.45)
   const duration = Math.round(Math.min(280, Math.max(140, Math.abs(dest - from) / speed)))
+  bin.style.transition = "none"
+  placeBin(bin, deleteScale(from))
   requestAnimationFrame(() => {
     if (face.dataset.settle !== token) return
-    face.style.transition = "transform " + duration + "ms var(--ease-drawer)"
+    const travel = "transform " + duration + "ms var(--ease-drawer)"
+    face.style.transition = travel
+    bin.style.transition = travel
     face.style.transform = dest === 0 ? "translateX(0px)" : "translateX(" + dest + "px)"
+    placeBin(bin, endScale)
   })
   if (dest === 0) {
     face.addEventListener("transitionend", () => {
       if (face.dataset.settle !== token || row.classList.contains("is-open")) return
+      row.classList.remove("is-settling")
       face.style.transition = ""
       face.style.transform = ""
+      bin.style.transition = ""
     }, { once: true })
   }
 }
@@ -926,6 +948,9 @@ function bindSwipes() {
         face.style.transition = "none"
         origin = readX(face)
         row.classList.add("is-dragging")
+        row.classList.remove("is-settling")
+        const bin = row.querySelector(".swipe-delete")
+        bin.style.transition = "none"
         face.setPointerCapture(event.pointerId)
         closeSwipes(row)
       }
@@ -941,6 +966,9 @@ function bindSwipes() {
       if (x > 0) x *= 0.2
       else if (x < -REVEAL) x = -REVEAL + (x + REVEAL) * 0.2
       face.style.transform = "translateX(" + x + "px)"
+      const bin = row.querySelector(".swipe-delete")
+      bin.style.transition = "none"
+      placeBin(bin, reduceMotion() ? (x < 0 ? 1 : 0.18) : deleteScale(x))
     })
     const end = (event) => {
       if (event.pointerId !== pointerId) return
@@ -950,6 +978,9 @@ function bindSwipes() {
         if (!row.classList.contains("is-open")) {
           face.style.transition = ""
           face.style.transform = ""
+          const bin = row.querySelector(".swipe-delete")
+          bin.style.transition = ""
+          bin.style.transform = ""
         }
         return
       }
