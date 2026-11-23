@@ -395,15 +395,14 @@ h2 {
   transition: transform 120ms var(--ease-out);
 }
 
-.month-card > a:active, .month-pdf:active, .commit:active, .actions a:active .bubble, .submit:active, .stop:active, .text-btn:active, .trash:active {
+.month-card > a:active, .month-pdf:active, .commit:active, .actions a:active .bubble, .submit:active, .stop:active, .text-btn:active, .trash:active, .move:active {
   transform: scale(0.97);
 }
 
-.move:active { transform: translateX(-8px); }
-
 .swipe {
   position: relative;
-  overflow: clip;
+  overflow: hidden;
+  clip-path: inset(0);
   background: var(--paper);
   touch-action: pan-y;
 }
@@ -416,6 +415,7 @@ h2 {
   width: 84px;
   border: 0;
   padding: 0;
+  appearance: none;
   display: grid;
   place-items: center;
   background: #e11d48;
@@ -424,7 +424,6 @@ h2 {
   visibility: hidden;
 }
 
-.swipe:active .swipe-delete,
 .swipe.is-dragging .swipe-delete,
 .swipe.is-open .swipe-delete {
   visibility: visible;
