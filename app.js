@@ -1079,10 +1079,15 @@ function closeSwipes(except) {
 
 function bindSwipes() {
   const ledger = document.querySelector(".ledger")
-  ledger?.addEventListener("scroll", () => {
-    if (ledger.style.overflow === "hidden") return
-    closeSwipes()
-  }, { passive: true })
+  if (ledger) {
+    const fade = () => ledger.classList.toggle("is-scrolled", ledger.scrollTop > 0)
+    fade()
+    ledger.addEventListener("scroll", () => {
+      fade()
+      if (ledger.style.overflow === "hidden") return
+      closeSwipes()
+    }, { passive: true })
+  }
   document.querySelectorAll(".swipe").forEach((row) => {
     const face = row.querySelector(".move")
     let pointerId = null

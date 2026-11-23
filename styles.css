@@ -250,6 +250,11 @@ img { max-width: 100%; }
   scrollbar-width: none;
 }
 
+.ledger.is-scrolled {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 64px);
+  mask-image: linear-gradient(to bottom, transparent, #000 64px);
+}
+
 .ledger::-webkit-scrollbar {
   display: none;
   width: 0;
