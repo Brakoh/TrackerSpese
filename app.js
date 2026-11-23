@@ -627,6 +627,64 @@ function trapFocus(event, root) {
   }
 }
 
+const phoneLandscape = window.matchMedia("(orientation: landscape) and (max-height: 520px) and (pointer: coarse)")
+
+function deviceAngle() {
+  if (typeof window.orientation === "number") return window.orientation
+  const angle = screen.orientation?.angle
+  if (angle === 90) return -90
+  if (angle === 270) return 90
+  return 0
+}
+
+function inset(side) {
+  const probe = document.getElementById("safe-probe")
+  if (!probe) return "0px"
+  return getComputedStyle(probe)["padding" + side] || "0px"
+}
+
+function holdPortrait() {
+  const root = document.documentElement
+  const landscape = phoneLandscape.matches
+  const angle = deviceAngle()
+  root.classList.toggle("hold-portrait", landscape)
+  root.classList.toggle("hold-left", landscape && angle !== 90)
+  root.classList.toggle("hold-right", landscape && angle === 90)
+  if (!landscape) {
+    root.style.removeProperty("--safe-top")
+    root.style.removeProperty("--safe-right")
+    root.style.removeProperty("--safe-bottom")
+    root.style.removeProperty("--safe-left")
+    return
+  }
+  const top = inset("Top")
+  const right = inset("Right")
+  const bottom = inset("Bottom")
+  const left = inset("Left")
+  if (angle === 90) {
+    root.style.setProperty("--safe-top", right)
+    root.style.setProperty("--safe-right", bottom)
+    root.style.setProperty("--safe-bottom", left)
+    root.style.setProperty("--safe-left", top)
+  } else {
+    root.style.setProperty("--safe-top", left)
+    root.style.setProperty("--safe-right", top)
+    root.style.setProperty("--safe-bottom", right)
+    root.style.setProperty("--safe-left", bottom)
+  }
+}
+
+function tryLockPortrait() {
+  if (!window.matchMedia("(pointer: coarse)").matches || !screen.orientation?.lock) return
+  screen.orientation.lock("portrait").catch(() => {})
+}
+
+phoneLandscape.addEventListener("change", holdPortrait)
+window.addEventListener("orientationchange", holdPortrait)
+window.addEventListener("resize", holdPortrait)
+document.addEventListener("pointerdown", tryLockPortrait, { once: true })
+holdPortrait()
+
 document.addEventListener("gesturestart", (event) => event.preventDefault())
 document.addEventListener("touchmove", (event) => {
   if (event.touches && event.touches.length > 1) event.preventDefault()
