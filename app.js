@@ -661,22 +661,8 @@ function trapFocus(event, root) {
 }
 
 document.addEventListener("gesturestart", (event) => event.preventDefault())
-function canScroll(target) {
-  const ledger = target.closest(".ledger")
-  if (ledger) return ledger.scrollHeight > ledger.clientHeight + 1
-  const screen = target.closest(".screen")
-  if (screen && !screen.querySelector(":scope > .ledger")) return screen.scrollHeight > screen.clientHeight + 1
-  return false
-}
-
 document.addEventListener("touchmove", (event) => {
-  if (event.touches && event.touches.length > 1) {
-    event.preventDefault()
-    return
-  }
-  if (event.target.closest("[data-drag]")) return
-  if (canScroll(event.target)) return
-  event.preventDefault()
+  if (event.touches && event.touches.length > 1) event.preventDefault()
 }, { passive: false })
 
 window.addEventListener("hashchange", () => {
