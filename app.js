@@ -527,7 +527,9 @@ function submitForm(form, route) {
   persist()
   dirty = false
   status(route.mode === "edit" ? "Spesa aggiornata." : "Spesa aggiunta.")
-  const ym = entry.kind === "once" ? entry.date.slice(0, 7) : entry.kind === "plan" ? entry.startDate.slice(0, 7) : entry.startedMonth
+  const ym = route.mode === "edit"
+    ? route.ym
+    : entry.kind === "once" ? entry.date.slice(0, 7) : entry.kind === "plan" ? entry.startDate.slice(0, 7) : entry.startedMonth
   go("#/mese/" + ym)
 }
 
