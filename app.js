@@ -837,15 +837,30 @@ function confirmTravel(pop, card) {
 }
 
 const REVEAL = 84
+const BIN = 56
+const BIN_INSET = 6
 
-function deleteScale(x) {
-  const t = Math.min(1, Math.max(0, -x / REVEAL))
+function binScale(x) {
+  const gap = Math.max(0, -x)
+  const t = Math.min(1, gap / REVEAL)
   const eased = 1 - Math.pow(1 - t, 3)
-  return 0.18 + 0.82 * eased
+  const fit = Math.max(0, gap - BIN_INSET * 2) / BIN
+  return Math.min(eased, fit)
 }
 
-function placeBin(bin, scale) {
-  bin.style.transform = "translateY(-50%) scale(" + scale + ")"
+function placeBin(bin, x) {
+  bin.style.transition = "none"
+  bin.style.transform = "translateY(-50%) scale(" + binScale(x) + ")"
+}
+
+function followBin(face, bin, token, duration) {
+  const stopAt = performance.now() + duration + 50
+  const step = () => {
+    if (face.dataset.settle !== token || performance.now() > stopAt) return
+    placeBin(bin, readX(face))
+    requestAnimationFrame(step)
+  }
+  requestAnimationFrame(step)
 }
 
 function readX(el) {
@@ -864,7 +879,6 @@ function settleFace(face, dest, velocity) {
   row.classList.toggle("is-open", dest !== 0)
   row.classList.toggle("is-settling", dest === 0 && Math.abs(from) >= 0.5)
   const bin = row.querySelector(".swipe-delete")
-  const endScale = dest === 0 ? 0.18 : 1
   if (dest === 0) {
     bin.tabIndex = -1
     bin.setAttribute("aria-hidden", "true")
@@ -874,25 +888,23 @@ function settleFace(face, dest, velocity) {
   }
   if (reduceMotion()) {
     row.classList.remove("is-settling")
-    placeBin(bin, endScale)
+    placeBin(bin, dest)
     if (dest === 0) {
       face.style.transition = ""
       face.style.transform = ""
       bin.style.transition = ""
+      bin.style.transform = ""
     } else face.style.transform = "translateX(" + dest + "px)"
     return
   }
   const speed = Math.max(Math.abs(velocity || 0), 0.45)
   const duration = Math.round(Math.min(280, Math.max(140, Math.abs(dest - from) / speed)))
-  bin.style.transition = "none"
-  placeBin(bin, deleteScale(from))
+  placeBin(bin, from)
   requestAnimationFrame(() => {
     if (face.dataset.settle !== token) return
-    const travel = "transform " + duration + "ms var(--ease-drawer)"
-    face.style.transition = travel
-    bin.style.transition = travel
+    face.style.transition = "transform " + duration + "ms var(--ease-drawer)"
     face.style.transform = dest === 0 ? "translateX(0px)" : "translateX(" + dest + "px)"
-    placeBin(bin, endScale)
+    followBin(face, bin, token, duration)
   })
   if (dest === 0) {
     face.addEventListener("transitionend", () => {
@@ -968,7 +980,7 @@ function bindSwipes() {
       face.style.transform = "translateX(" + x + "px)"
       const bin = row.querySelector(".swipe-delete")
       bin.style.transition = "none"
-      placeBin(bin, reduceMotion() ? (x < 0 ? 1 : 0.18) : deleteScale(x))
+      placeBin(bin, x)
     })
     const end = (event) => {
       if (event.pointerId !== pointerId) return

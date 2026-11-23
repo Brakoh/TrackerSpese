@@ -456,7 +456,7 @@ h2 {
 .swipe-delete {
   position: absolute;
   top: 50%;
-  right: 14px;
+  right: 6px;
   width: 56px;
   height: 56px;
   border: 0;
@@ -469,7 +469,7 @@ h2 {
   color: #fff;
   cursor: pointer;
   visibility: hidden;
-  transform: translateY(-50%) scale(0.18);
+  transform: translateY(-50%) scale(0);
   transform-origin: right center;
 }
 
