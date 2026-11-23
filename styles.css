@@ -234,6 +234,13 @@ img { max-width: 100%; }
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
   margin-top: 18px;
+  scrollbar-width: none;
+}
+
+.ledger::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .screen:not(:has(.ledger)) { touch-action: pan-y; }
@@ -396,7 +403,8 @@ h2 {
 
 .swipe {
   position: relative;
-  overflow: hidden;
+  overflow: clip;
+  background: var(--paper);
   touch-action: pan-y;
 }
 
@@ -413,6 +421,13 @@ h2 {
   background: #e11d48;
   color: #fff;
   cursor: pointer;
+  visibility: hidden;
+}
+
+.swipe:active .swipe-delete,
+.swipe.is-dragging .swipe-delete,
+.swipe.is-open .swipe-delete {
+  visibility: visible;
 }
 
 .swipe-delete svg { width: 22px; height: 22px; }
