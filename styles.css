@@ -338,7 +338,6 @@ h2 {
   border-radius: 22px;
   overflow: hidden;
   background: #fff;
-  box-shadow: 0 10px 22px rgba(22, 22, 22, 0.16);
 }
 
 .hero-art img {
@@ -350,10 +349,25 @@ h2 {
 
 .actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 3fr);
+  column-gap: 10px;
+  align-items: start;
   flex: none;
   margin-top: 22px;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.actions-rule {
+  width: 1px;
+  height: 22px;
+  margin-top: 17px;
+  background: var(--line);
+  justify-self: center;
 }
 
 .actions a,
@@ -601,7 +615,6 @@ h2 {
   background: #fff;
   border-radius: 28px;
   overflow: hidden;
-  box-shadow: var(--shadow);
 }
 
 .banner img {
@@ -746,18 +759,19 @@ h2 {
 
 .pencil {
   position: absolute;
-  top: 14px;
+  top: 50%;
   right: 12px;
   width: 32px;
   height: 32px;
   display: grid;
   place-items: center;
   color: var(--ink);
-  opacity: 0.75;
+  opacity: 0.2;
   pointer-events: none;
+  transform: translateY(-50%);
 }
 
-.pencil svg { width: 18px; height: 18px; }
+.pencil svg { width: 19px; height: 19px; }
 
 .doc {
   background: #fff;
@@ -878,7 +892,6 @@ h2 {
   height: auto;
   background: #fff;
   border-radius: 28px;
-  box-shadow: var(--shadow);
 }
 
 .empty p { margin: 8px 0 0; max-width: 28ch; }
@@ -999,7 +1012,18 @@ h2 {
   padding: 0 calc(20px + var(--safe-right)) calc(18px + var(--safe-bottom)) calc(20px + var(--safe-left));
 }
 
-[data-panel] { min-width: 0; max-width: 100%; }
+.kind-swap {
+  position: relative;
+  overflow: hidden;
+}
+
+[data-panel] {
+  display: flow-root;
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-panel][hidden] { display: none; }
 
 .kinds { display: grid; gap: 8px; }
 
@@ -1013,6 +1037,7 @@ h2 {
   background: var(--paper);
   border: 1.5px solid transparent;
   font-weight: 600;
+  transition: background-color 180ms var(--ease-out), border-color 180ms var(--ease-out);
 }
 
 .kinds input { width: 20px; height: 20px; accent-color: var(--blue); margin: 0; }
@@ -1205,7 +1230,7 @@ h2 {
 
 @media (prefers-reduced-motion: reduce) {
   .moves > li,
-  .move, .month-card > a, .month-pdf, .commit, .bubble, .actions button, .actions button .bubble::after, .filter-rule, .filter-none, .submit, .dock a, .dock-mark, .trash, .confirm-pop, .confirm-card {
+  .move, .month-card > a, .month-pdf, .commit, .bubble, .actions button, .actions button .bubble::after, .filter-rule, .filter-none, .submit, .dock a, .dock-mark, .trash, .confirm-pop, .confirm-card, .kinds label {
     animation: none;
     transition: none;
   }

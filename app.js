@@ -27,6 +27,7 @@ let dockIndex = 0
 let confirming = false
 let homeFilter = null
 let filterMotion = 0
+let kindMotion = 0
 
 function icon(name) {
   return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + "</svg>"
@@ -214,7 +215,7 @@ function monthHTML(route) {
     const dim = lines.length && homeFilter && !on ? " is-dim" : ""
     return '<button type="button" class="filter' + (on ? " is-on" : "") + dim + '" data-filter="' + kind + '" aria-pressed="' + (on ? "true" : "false") + '"' + (lines.length ? "" : " disabled") + '><span class="bubble ' + bubble + '">' + icon(bubble) + "</span>" + esc(label) + "</button>"
   }).join("")
-  const actions = '<a href="#/mese/nuova/once"><span class="bubble add">' + icon("plus") + "</span>Aggiungi</a>" + filters
+  const actions = '<a href="#/mese/nuova/once"><span class="bubble add">' + icon("plus") + '</span>Aggiungi</a><span class="actions-rule" aria-hidden="true"></span><div class="filters">' + filters + "</div>"
   const rows = lines.map((line, index) => [line, index])
   const match = homeFilter ? rows.filter(([line]) => line.kind === homeFilter) : []
   const rest = homeFilter ? rows.filter(([line]) => line.kind !== homeFilter) : []
@@ -329,7 +330,7 @@ function sheetHTML(route) {
         return '<label><input type="radio" name="kind" value="' + value + '"' + checked + ">" + label + "</label>"
       }).join("") + "</div>"
   const service = field("name", "Nome del servizio", input('id="service-name" name="name" value="' + esc(values.name) + '" list="nomi"') + listNames())
-  const panels = service + panelOnce(values, kind) + panelSub(values, editing, kind) + panelPlan(values, kind)
+  const panels = service + '<div class="kind-swap">' + panelOnce(values, kind) + panelSub(values, editing, kind) + panelPlan(values, kind) + "</div>"
   const save = editing
     ? '<div class="sheet-actions"><button type="button" class="trash" id="delete" aria-label="Elimina">' + icon("trash") + '</button><button class="submit" type="submit">Salva</button></div>'
     : '<button class="submit" type="submit">Aggiungi</button>'
@@ -613,7 +614,7 @@ function bindSheet(route) {
   const reduce = reduceMotion()
   sheetAbort = new AbortController()
   const signal = sheetAbort.signal
-  syncPanels(form)
+  syncPanels(form, false)
   if (!reduce) {
     panel.style.transform = "translateY(100%)"
     dim.style.opacity = "0"
@@ -630,8 +631,9 @@ function bindSheet(route) {
   root.querySelectorAll("[data-close]").forEach((el) => el.addEventListener("click", () => leave(route), { signal }))
   form.addEventListener("input", () => { dirty = true }, { signal })
   form.addEventListener("change", (event) => {
-    syncPanels(form)
-    if (event.target.name === "kind") showErrors(form, {})
+    if (event.target.name !== "kind") return
+    syncPanels(form, reduceMotion() ? "fade" : true)
+    showErrors(form, {})
   }, { signal })
   form.addEventListener("submit", (event) => {
     event.preventDefault()
@@ -654,12 +656,156 @@ function bindSheet(route) {
   }
 }
 
-function syncPanels(form) {
+function syncPanels(form, animate) {
   const selected = form.querySelector("input[name=kind]:checked")
   const kind = selected ? selected.value : form.dataset.kind
+  const panels = [...form.querySelectorAll("[data-panel]")]
+  const next = panels.find((panel) => panel.dataset.panel === kind)
+  if (!next) return
+  const current = panels.find((panel) => panel !== next && !panel.hidden)
+  const pair = current ? current.dataset.panel + next.dataset.panel : ""
+  const flat = pair === "subplan" || pair === "plansub"
+  if (!current || !animate || flat) {
+    showOnly(form, next)
+    return
+  }
+  if (animate === "fade") {
+    fadePanels(form, next)
+    return
+  }
+  morphPanels(form, current, next)
+}
+
+function showOnly(form, next) {
+  kindMotion += 1
   form.querySelectorAll("[data-panel]").forEach((panel) => {
-    panel.hidden = panel.dataset.panel !== kind
+    if (panel !== next) retirePanel(panel)
   })
+  next.hidden = false
+  next.inert = false
+  next.removeAttribute("aria-hidden")
+  next.style.transition = ""
+  next.style.opacity = ""
+  next.style.transform = ""
+  next.style.position = ""
+  next.style.left = ""
+  next.style.right = ""
+  next.style.top = ""
+  next.style.pointerEvents = ""
+  const clip = form.querySelector(".kind-swap")
+  if (!clip) return
+  clip.style.transition = ""
+  clip.style.height = ""
+}
+
+function fadePanels(form, to) {
+  const token = ++kindMotion
+  form.querySelectorAll("[data-panel]").forEach((panel) => {
+    if (panel !== to) retirePanel(panel)
+  })
+  to.hidden = false
+  to.style.transition = "none"
+  to.style.opacity = "0"
+  to.offsetHeight
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (token !== kindMotion || !to.isConnected) return
+      to.style.transition = "opacity 200ms var(--ease-out)"
+      to.style.opacity = "1"
+      window.setTimeout(() => {
+        if (token !== kindMotion || !to.isConnected) return
+        kindMotion += 1
+        to.style.transition = ""
+        to.style.opacity = ""
+      }, 240)
+    })
+  })
+}
+
+function morphPanels(form, from, to) {
+  const clip = form.querySelector(".kind-swap")
+  const token = ++kindMotion
+  const order = ["once", "sub", "plan"]
+  const dir = Math.sign(order.indexOf(to.dataset.panel) - order.indexOf(from.dataset.panel)) || 1
+  const live = Math.round(clip.getBoundingClientRect().height)
+  clip.style.transition = "none"
+  clip.style.height = live + "px"
+  form.querySelectorAll("[data-panel]").forEach((panel) => {
+    if (panel !== from && panel !== to) retirePanel(panel)
+  })
+  lockPanel(from)
+  from.style.position = "absolute"
+  from.style.left = "0"
+  from.style.right = "0"
+  from.style.top = "0"
+  from.style.pointerEvents = "none"
+  from.inert = true
+  from.setAttribute("aria-hidden", "true")
+  if (to.hidden) {
+    to.style.transition = "none"
+    to.style.opacity = "0"
+    to.style.transform = "translateY(" + (dir * 8) + "px)"
+    to.hidden = false
+  } else {
+    lockPanel(to)
+    to.style.position = ""
+    to.style.left = ""
+    to.style.right = ""
+    to.style.top = ""
+    to.style.pointerEvents = ""
+    to.inert = false
+    to.removeAttribute("aria-hidden")
+  }
+  const nextH = to.offsetHeight
+  const duration = Math.min(270, Math.max(150, Math.round(Math.abs(nextH - live) / 0.5)))
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (token !== kindMotion || !clip.isConnected) return
+      const fade = "opacity " + duration + "ms var(--ease-out), transform " + duration + "ms var(--ease-out)"
+      clip.style.transition = "height " + duration + "ms var(--ease-out)"
+      clip.style.height = nextH + "px"
+      from.style.transition = fade
+      to.style.transition = fade
+      from.style.opacity = "0"
+      from.style.transform = "translateY(" + (dir * -8) + "px)"
+      to.style.opacity = "1"
+      to.style.transform = "none"
+      window.setTimeout(() => settleMorph(clip, from, to, token), duration + 40)
+    })
+  })
+}
+
+function lockPanel(panel) {
+  const style = getComputedStyle(panel)
+  panel.style.transition = "none"
+  panel.style.opacity = style.opacity
+  panel.style.transform = style.transform === "none" ? "none" : style.transform
+}
+
+function retirePanel(panel) {
+  if (!panel) return
+  panel.hidden = true
+  panel.inert = false
+  panel.removeAttribute("aria-hidden")
+  panel.style.transition = ""
+  panel.style.opacity = ""
+  panel.style.transform = ""
+  panel.style.position = ""
+  panel.style.left = ""
+  panel.style.right = ""
+  panel.style.top = ""
+  panel.style.pointerEvents = ""
+}
+
+function settleMorph(clip, from, to, token) {
+  if (token !== kindMotion || !clip.isConnected) return
+  kindMotion += 1
+  clip.style.transition = ""
+  clip.style.height = ""
+  retirePanel(from)
+  to.style.transition = ""
+  to.style.opacity = ""
+  to.style.transform = ""
 }
 
 function activeKind(form) {
@@ -926,7 +1072,10 @@ function closeSwipes(except) {
 
 function bindSwipes() {
   const ledger = document.querySelector(".ledger")
-  ledger?.addEventListener("scroll", () => closeSwipes(), { passive: true })
+  ledger?.addEventListener("scroll", () => {
+    if (ledger.style.overflow === "hidden") return
+    closeSwipes()
+  }, { passive: true })
   document.querySelectorAll(".swipe").forEach((row) => {
     const face = row.querySelector(".move")
     let pointerId = null
@@ -937,6 +1086,25 @@ function bindSwipes() {
     let lastX = 0
     let lastT = 0
     let velocity = 0
+    let scrollLock = 0
+    const claimHorizontal = () => {
+      if (axis === "x") return
+      axis = "x"
+      face.style.transition = "none"
+      origin = readX(face)
+      row.classList.add("is-dragging")
+      row.classList.remove("is-settling")
+      const bin = row.querySelector(".swipe-delete")
+      bin.style.transition = "none"
+      closeSwipes(row)
+      if (ledger) {
+        ledger.style.overflow = "hidden"
+        ledger.scrollTop = scrollLock
+      }
+      if (pointerId != null) {
+        try { face.setPointerCapture(pointerId) } catch (e) {}
+      }
+    }
     face.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return
       pointerId = event.pointerId
@@ -948,25 +1116,31 @@ function bindSwipes() {
       velocity = 0
       face.dataset.swiped = ""
       origin = 0
+      scrollLock = ledger ? ledger.scrollTop : 0
     })
+    face.addEventListener("touchmove", (event) => {
+      if (pointerId == null) return
+      const touch = event.touches[0]
+      if (!touch) return
+      const dx = touch.clientX - startX
+      const dy = touch.clientY - startY
+      if (!axis && dx <= -2 && Math.abs(dx) >= Math.abs(dy)) claimHorizontal()
+      if (axis === "x") {
+        event.preventDefault()
+        if (ledger) ledger.scrollTop = scrollLock
+      }
+    }, { passive: false })
     face.addEventListener("pointermove", (event) => {
       if (event.pointerId !== pointerId) return
       const dx = event.clientX - startX
       const dy = event.clientY - startY
       if (!axis) {
-        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
-        axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y"
-        if (axis === "y") return
-        face.style.transition = "none"
-        origin = readX(face)
-        row.classList.add("is-dragging")
-        row.classList.remove("is-settling")
-        const bin = row.querySelector(".swipe-delete")
-        bin.style.transition = "none"
-        face.setPointerCapture(event.pointerId)
-        closeSwipes(row)
+        if (dx <= -2 && Math.abs(dx) >= Math.abs(dy)) claimHorizontal()
+        else if (Math.abs(dy) >= 8 && Math.abs(dy) > Math.abs(dx)) axis = "y"
+        else return
       }
       if (axis !== "x") return
+      if (ledger) ledger.scrollTop = scrollLock
       face.dataset.swiped = "1"
       const now = performance.now()
       const dt = now - lastT
@@ -986,6 +1160,7 @@ function bindSwipes() {
       if (event.pointerId !== pointerId) return
       pointerId = null
       row.classList.remove("is-dragging")
+      if (ledger) ledger.style.overflow = ""
       if (axis !== "x") {
         if (!row.classList.contains("is-open")) {
           face.style.transition = ""
