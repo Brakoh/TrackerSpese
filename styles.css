@@ -106,53 +106,6 @@ img { max-width: 100%; }
   border-radius: 12px;
 }
 
-.safe-probe {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 0;
-  height: 0;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  visibility: hidden;
-  pointer-events: none;
-}
-
-html.hold-portrait,
-html.hold-portrait body {
-  height: 100%;
-  overflow: hidden;
-  background: var(--paper);
-}
-
-html.hold-portrait .stage {
-  position: fixed;
-  width: 100dvh;
-  height: 100dvw;
-  overflow: hidden;
-}
-
-html.hold-portrait.hold-left .stage {
-  top: 100%;
-  left: 0;
-  transform: rotate(-90deg);
-  transform-origin: top left;
-}
-
-html.hold-portrait.hold-right .stage {
-  top: 0;
-  left: 100%;
-  transform: rotate(90deg);
-  transform-origin: top left;
-}
-
-html.hold-portrait .phone {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-}
-
-html.hold-portrait .sheet { max-height: 92%; }
-
 .phone {
   position: relative;
   min-height: 100dvh;
@@ -251,9 +204,24 @@ html.hold-portrait .sheet { max-height: 92%; }
 
 .screen {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
   padding: 4px calc(20px + var(--safe-right)) calc(112px + var(--safe-bottom)) calc(20px + var(--safe-left));
+}
+
+.screen:has(.ledger) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ledger {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin-top: 18px;
 }
 
 h1, h2 {
@@ -272,7 +240,8 @@ h2 {
 
 .hero {
   position: relative;
-  min-height: 196px;
+  flex: none;
+  height: 140px;
   border-radius: 28px;
   background: var(--lime);
   color: var(--lime-ink);
@@ -320,8 +289,8 @@ h2 {
   z-index: 1;
   right: 16px;
   top: 16px;
+  bottom: 16px;
   width: 108px;
-  height: 108px;
   border-radius: 22px;
   overflow: hidden;
   background: #fff;
@@ -339,6 +308,7 @@ h2 {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+  flex: none;
   margin-top: 22px;
 }
 
@@ -383,6 +353,9 @@ h2 {
 }
 
 .moves { gap: 2px; margin-top: 18px; }
+
+.ledger .moves,
+.ledger .empty { margin-top: 0; }
 
 .move, .month-card, .commit {
   transition: transform 120ms var(--ease-out);

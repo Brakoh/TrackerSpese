@@ -152,7 +152,7 @@ function monthHTML(route) {
       return '<li><button type="button" class="move" data-edit="' + esc(line.id) + '" title="' + esc(line.name) + '"><span class="badge ' + line.kind + '">' + icon(line.kind) + '</span><span class="move-text"><span class="move-name">' + esc(line.name) + '</span><span class="move-meta">' + esc(meta(line)) + '</span></span><span class="move-amount">' + esc(D.formatEUR(line.amount)) + "</span></button></li>"
     }).join("") + "</ul>"
     : '<div class="empty"><img src="assets/img/mese-vuoto.jpg" alt="" width="1024" height="1024"><p>Nessuna spesa in ' + esc(D.monthName(ym).toLowerCase()) + ". Aggiungine una con i tasti qui sopra.</p></div>"
-  return '<article class="hero"><div class="hero-copy"><h1>' + esc(D.monthName(ym)) + '</h1><p class="hero-amount"><span class="sr">Totale del mese </span>' + esc(D.formatEUR(total)) + '</p></div><div class="hero-art"><img src="assets/img/hero-spesa.jpg" alt="" width="1024" height="1024" fetchpriority="high"></div></article><div class="actions">' + actions + "</div>" + list
+  return '<article class="hero"><div class="hero-copy"><h1>' + esc(D.monthName(ym)) + '</h1><p class="hero-amount"><span class="sr">Totale del mese </span>' + esc(D.formatEUR(total)) + '</p></div><div class="hero-art"><img src="assets/img/hero-spesa.jpg" alt="" width="1024" height="1024" fetchpriority="high"></div></article><div class="actions">' + actions + '</div><div class="ledger">' + list + "</div>"
 }
 
 function archiveHTML(route) {
@@ -626,64 +626,6 @@ function trapFocus(event, root) {
     first.focus()
   }
 }
-
-const phoneLandscape = window.matchMedia("(orientation: landscape) and (max-height: 520px) and (pointer: coarse)")
-
-function deviceAngle() {
-  if (typeof window.orientation === "number") return window.orientation
-  const angle = screen.orientation?.angle
-  if (angle === 90) return -90
-  if (angle === 270) return 90
-  return 0
-}
-
-function inset(side) {
-  const probe = document.getElementById("safe-probe")
-  if (!probe) return "0px"
-  return getComputedStyle(probe)["padding" + side] || "0px"
-}
-
-function holdPortrait() {
-  const root = document.documentElement
-  const landscape = phoneLandscape.matches
-  const angle = deviceAngle()
-  root.classList.toggle("hold-portrait", landscape)
-  root.classList.toggle("hold-left", landscape && angle !== 90)
-  root.classList.toggle("hold-right", landscape && angle === 90)
-  if (!landscape) {
-    root.style.removeProperty("--safe-top")
-    root.style.removeProperty("--safe-right")
-    root.style.removeProperty("--safe-bottom")
-    root.style.removeProperty("--safe-left")
-    return
-  }
-  const top = inset("Top")
-  const right = inset("Right")
-  const bottom = inset("Bottom")
-  const left = inset("Left")
-  if (angle === 90) {
-    root.style.setProperty("--safe-top", right)
-    root.style.setProperty("--safe-right", bottom)
-    root.style.setProperty("--safe-bottom", left)
-    root.style.setProperty("--safe-left", top)
-  } else {
-    root.style.setProperty("--safe-top", left)
-    root.style.setProperty("--safe-right", top)
-    root.style.setProperty("--safe-bottom", right)
-    root.style.setProperty("--safe-left", bottom)
-  }
-}
-
-function tryLockPortrait() {
-  if (!window.matchMedia("(pointer: coarse)").matches || !screen.orientation?.lock) return
-  screen.orientation.lock("portrait").catch(() => {})
-}
-
-phoneLandscape.addEventListener("change", holdPortrait)
-window.addEventListener("orientationchange", holdPortrait)
-window.addEventListener("resize", holdPortrait)
-document.addEventListener("pointerdown", tryLockPortrait, { once: true })
-holdPortrait()
 
 document.addEventListener("gesturestart", (event) => event.preventDefault())
 document.addEventListener("touchmove", (event) => {
