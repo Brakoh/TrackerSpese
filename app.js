@@ -13,11 +13,12 @@ const ICONS = {
   download: '<path d="M12 4.5v10"/><path d="M8 11l4 4 4-4"/><path d="M5.5 19.5h13"/>',
   close: '<path d="M7 7l10 10M17 7 7 17"/>',
   trash: '<path d="M5 7.5h14"/><path d="M9.5 7.5V5.8a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V7.5"/><path d="M7.2 7.5l.7 11.2a1 1 0 0 0 1 .8h6.2a1 1 0 0 0 1-.8l.7-11.2"/><path d="M10.2 11v5M13.8 11v5"/>',
+  pencil: '<path d="M13.2 6.2 17.8 10.8"/><path d="M4.8 19.2h3.6L19 8.6a1.6 1.6 0 0 0 0-2.3l-1.3-1.3a1.6 1.6 0 0 0-2.3 0L4.8 15.6z"/>',
 }
 
 let entries = load()
-let armedId = null
 let dirty = false
+let viewKey = ""
 let lastHash = location.hash
 let sheetAbort = null
 let suppress = false
@@ -77,18 +78,44 @@ function parseRoute() {
   const parts = (location.hash || "#/mese").replace(/^#/, "").split("/").filter(Boolean)
   const top = parts[0] || "mese"
   const today = D.todayISO()
+  const current = D.currentYM()
   if (top === "archivio") {
     const year = /^\d{4}$/.test(parts[1] || "") ? parts[1] : today.slice(0, 4)
     return { name: "archivio", year }
   }
-  if (top === "impegni") return { name: "impegni" }
-  const ym = /^\d{4}-\d{2}$/.test(parts[1] || "") ? parts[1] : D.currentYM()
-  if (parts[2] === "nuova") {
-    const kind = ["once", "sub", "plan"].includes(parts[3]) ? parts[3] : "once"
-    return { name: "mese", ym, mode: "create", kind }
+  if (top === "impegni") {
+    if (parts[1] === "modifica" && parts[2]) return { name: "impegni", mode: "edit", id: parts[2] }
+    return { name: "impegni" }
   }
-  if (parts[2] === "modifica" && parts[3]) return { name: "mese", ym, mode: "edit", id: parts[3] }
-  return { name: "mese", ym }
+  if (top === "documento") {
+    const ym = /^\d{4}-\d{2}$/.test(parts[1] || "") ? parts[1] : current
+    if (ym >= current) return { name: "mese", ym: current }
+    return { name: "documento", ym }
+  }
+  let cursor = 1
+  if (/^\d{4}-\d{2}$/.test(parts[1] || "")) {
+    const ym = parts[1]
+    cursor = 2
+    if (parts[cursor] !== "nuova" && parts[cursor] !== "modifica" && ym < current) return { name: "documento", ym }
+  }
+  if (parts[cursor] === "nuova") {
+    const kind = ["once", "sub", "plan"].includes(parts[cursor + 1]) ? parts[cursor + 1] : "once"
+    return { name: "mese", ym: current, mode: "create", kind }
+  }
+  if (parts[cursor] === "modifica" && parts[cursor + 1]) return { name: "mese", ym: current, mode: "edit", id: parts[cursor + 1] }
+  return { name: "mese", ym: current }
+}
+
+function placeHash(route) {
+  if (route.name === "impegni") return "#/impegni"
+  if (route.name === "archivio") return "#/archivio/" + route.year
+  if (route.name === "documento") return "#/documento/" + route.ym
+  return "#/mese"
+}
+
+function editHash(route, id) {
+  if (route.name === "impegni") return "#/impegni/modifica/" + id
+  return "#/mese/modifica/" + id
 }
 
 function go(hash) {
@@ -111,21 +138,25 @@ function meta(line) {
   return D.dayLabel(line.date) + " · " + kindLabel(line) + " · " + when
 }
 
+function brand(label, long) {
+  return '<div class="brand' + (long ? " long" : "") + '"><span class="mark" aria-hidden="true"></span> ' + label + "</div>"
+}
+
+function pdfButton(ym) {
+  return '<button type="button" class="top-action" id="pdf" aria-label="Scarica il PDF di ' + esc(D.monthTitle(ym)) + '">' + icon("download") + "</button>"
+}
+
 function topHTML(route) {
-  if (route.name !== "mese") {
-    return '<div class="brand"><span class="mark" aria-hidden="true"></span> Spese</div>'
+  if (route.name === "documento") {
+    return '<a class="back" href="#/archivio/' + route.ym.slice(0, 4) + '">' + icon("back") + "<span>Documenti</span></a>" + pdfButton(route.ym)
   }
-  const title = D.monthTitle(route.ym)
-  const pdf = '<button type="button" class="top-action" id="pdf" aria-label="Scarica il PDF di ' + esc(title) + '">' + icon("download") + "</button>"
-  if (route.ym === D.currentYM()) {
-    return '<div class="brand"><span class="mark" aria-hidden="true"></span> Spese</div>' + pdf
-  }
-  const year = route.ym.slice(0, 4)
-  return '<a class="back" href="#/archivio/' + year + '">' + icon("back") + "<span>Archivio</span></a>" + pdf
+  if (route.name === "archivio") return brand("Documenti")
+  if (route.name === "impegni") return brand("Fatturazioni ricorrenti", true)
+  return brand("Spese") + pdfButton(D.currentYM())
 }
 
 function dockIndexOf(route) {
-  if (route.name === "archivio") return 1
+  if (route.name === "archivio" || route.name === "documento") return 1
   if (route.name === "impegni") return 2
   return 0
 }
@@ -133,11 +164,12 @@ function dockIndexOf(route) {
 function navHTML(route) {
   const items = [
     ["mese", "Mese", "month"],
-    ["archivio", "Archivio", "archive"],
-    ["impegni", "Impegni", "commitments"],
+    ["archivio", "Documenti", "archive"],
+    ["impegni", "Fatturazioni ricorrenti", "commitments"],
   ]
   const links = items.map(([id, label, glyph]) => {
-    const current = route.name === id ? ' aria-current="page"' : ""
+    const here = route.name === id || (id === "archivio" && route.name === "documento")
+    const current = here ? ' aria-current="page"' : ""
     const href = id === "archivio" ? "#/archivio/" + D.todayISO().slice(0, 4) : "#/" + id
     return '<a href="' + href + '"' + current + ' aria-label="' + label + '">' + icon(glyph) + "</a>"
   }).join("")
@@ -175,7 +207,7 @@ function monthHTML(route) {
     ["nuova/sub", "sub", "Abbonamento"],
     ["nuova/plan", "plan", "Rate"],
   ].map(([path, bubble, label]) => {
-    return '<a href="#/mese/' + ym + "/" + path + '"><span class="bubble ' + bubble + '">' + icon(bubble === "add" ? "plus" : bubble) + "</span>" + esc(label) + "</a>"
+    return '<a href="#/mese/' + path + '"><span class="bubble ' + bubble + '">' + icon(bubble === "add" ? "plus" : bubble) + "</span>" + esc(label) + "</a>"
   }).join("")
   const list = lines.length
     ? '<ul class="moves">' + lines.map((line) => {
@@ -204,12 +236,27 @@ function archiveHTML(route) {
   const cards = months.map((ym) => {
     const total = D.totalOf(D.linesForMonth(entries, ym, today))
     const title = D.monthTitle(ym)
-    return '<div class="month-card"><a href="#/mese/' + ym + '"><span><strong>' + esc(D.monthName(ym)) + '</strong><span>' + esc(String(year)) + '</span></span><b>' + esc(D.formatEUR(total)) + '</b></a><i class="month-rule" aria-hidden="true"></i><button type="button" class="month-pdf" data-pdf="' + ym + '" aria-label="Scarica il PDF di ' + esc(title) + '">' + icon("download") + "</button></div>"
+    const href = ym === D.currentYM() ? "#/mese" : "#/documento/" + ym
+    return '<div class="month-card"><a href="' + href + '"><span><strong>' + esc(D.monthName(ym)) + '</strong><span>' + esc(String(year)) + '</span></span></a><b>' + esc(D.formatEUR(total)) + '</b><i class="month-rule" aria-hidden="true"></i><button type="button" class="month-pdf" data-pdf="' + ym + '" aria-label="Scarica il PDF di ' + esc(title) + '">' + icon("download") + "</button></div>"
   }).join("")
   const body = months.length
     ? '<div class="stack">' + cards + '</div><article class="year-total"><h2>Totale del ' + esc(route.year) + "</h2><p>" + esc(D.formatEUR(months.reduce((sum, ym) => sum + D.totalOf(D.linesForMonth(entries, ym, today)), 0))) + "</p></article>"
     : '<div class="empty"><p>I mesi del ' + esc(route.year) + " compariranno qui.</p></div>"
-  return '<h1 class="page-title">Archivio</h1><figure class="banner"><img src="assets/img/archivio-mesi.jpg" alt="" width="1280" height="720"></figure><div class="years">' + chips + "</div>" + body
+  return '<figure class="banner"><img src="assets/img/archivio-mesi.jpg" alt="" width="1280" height="720"></figure><div class="years">' + chips + "</div>" + body
+}
+
+function documentHTML(route) {
+  const today = D.todayISO()
+  const lines = D.linesForMonth(entries, route.ym, today)
+  const total = D.totalOf(lines)
+  const rows = lines.map((line) => {
+    const day = String(Number(line.date.slice(8, 10)))
+    return '<div class="doc-row"><span class="doc-day">' + esc(day) + '</span><span class="doc-what"><span class="doc-name">' + esc(line.name) + '</span><span class="doc-kind">' + esc(kindLabel(line)) + '</span></span><span class="doc-amount">' + esc(D.formatEUR(line.amount)) + "</span></div>"
+  }).join("")
+  const body = lines.length
+    ? '<div class="doc-table"><div class="doc-head"><span>Giorno</span><span>Servizio</span><span>Importo</span></div>' + rows + "</div>"
+    : '<p class="doc-empty">Nessuna spesa in questo mese.</p>'
+  return '<article class="doc"><h1>' + esc(D.monthTitle(route.ym)) + "</h1>" + body + '<div class="doc-total"><span>Totale</span><b>' + esc(D.formatEUR(total)) + "</b></div></article>"
 }
 
 function commitmentsHTML() {
@@ -222,17 +269,15 @@ function commitmentsHTML() {
   const planCards = plans.length
     ? plans.map((entry) => planCard(entry, today)).join("")
     : '<div class="empty"><p>Nessuna rateizzazione attiva.</p></div>'
-  return '<h1 class="page-title">Impegni</h1><figure class="banner"><img src="assets/img/impegni-attivi.jpg" alt="" width="1280" height="720"></figure><h2>Abbonamenti</h2><div class="stack">' + subCards + '</div><h2>Rateizzazioni</h2><div class="stack">' + planCards + "</div>"
+  return '<h2 class="lead-title">Abbonamenti</h2><div class="stack">' + subCards + '</div><h2>Rateizzazioni</h2><div class="stack">' + planCards + "</div>"
+}
+
+function commitCard(id, name, detail) {
+  return '<button type="button" class="commit" data-edit="' + esc(id) + '"><span class="pencil" aria-hidden="true">' + icon("pencil") + '</span><span class="commit-copy"><span class="commit-name">' + esc(name) + '</span><span class="commit-meta">' + detail + '</span></span><span class="sr">Modifica</span></button>'
 }
 
 function subCard(entry) {
-  const disdetto = Boolean(entry.disdettaMonth || entry.deactivatedOn)
-  const actions = disdetto
-    ? "<p>Disdetto. Dal mese prossimo non si rinnova.</p>"
-    : armedId === entry.id
-      ? '<div class="confirm"><button type="button" class="stop" data-cancel>Annulla</button><button type="button" class="stop danger" data-stop="' + esc(entry.id) + '">Conferma</button></div><p>Questo mese resta. Dal mese prossimo non si rinnova.</p>'
-      : '<button type="button" class="stop" data-arm="' + esc(entry.id) + '">Ho disdetto</button>'
-  return '<article class="commit"><div class="commit-row"><div><h3>' + esc(entry.name) + "</h3><p>Rinnovo il " + entry.renewDay + " · " + esc(D.formatEUR(entry.amount)) + '</p></div><a class="stop" href="#/mese/' + D.currentYM() + "/modifica/" + esc(entry.id) + '">Modifica</a></div>' + actions + "</article>"
+  return commitCard(entry.id, entry.name, "Rinnovo il " + entry.renewDay + " · " + esc(D.formatEUR(entry.amount)))
 }
 
 function planCard(entry, today) {
@@ -240,7 +285,7 @@ function planCard(entry, today) {
   const place = progress.current === 0
     ? "Inizia il " + D.dayLabel(entry.startDate)
     : "Rata " + progress.current + " di " + progress.months
-  return '<article class="commit"><div class="commit-row"><div><h3>' + esc(entry.name) + "</h3><p>" + esc(place) + " · fine " + esc(D.dayLabel(D.planEnd(entry))) + " " + D.planEnd(entry).slice(0, 4) + '</p></div><b>' + esc(D.formatEUR(entry.total)) + '</b></div><a class="stop" href="#/mese/' + D.currentYM() + "/modifica/" + esc(entry.id) + '">Modifica</a></article>'
+  return commitCard(entry.id, entry.name, esc(place) + " · fine " + esc(D.dayLabel(D.planEnd(entry))) + " " + D.planEnd(entry).slice(0, 4) + " · " + esc(D.formatEUR(entry.total)))
 }
 
 function field(key, label, control) {
@@ -267,18 +312,18 @@ function sheetHTML(route) {
         return '<label><input type="radio" name="kind" value="' + value + '"' + checked + ">" + label + "</label>"
       }).join("") + "</div>"
   const service = field("name", "Nome del servizio", input('id="service-name" name="name" value="' + esc(values.name) + '" list="nomi"') + listNames())
-  const panels = service + panelOnce(values, kind) + panelSub(values, route, editing, kind) + panelPlan(values, kind)
+  const panels = service + panelOnce(values, kind) + panelSub(values, editing, kind) + panelPlan(values, kind)
   const save = editing
     ? '<div class="sheet-actions"><button type="button" class="trash" id="delete" aria-label="Elimina">' + icon("trash") + '</button><button class="submit" type="submit">Salva</button></div>'
     : '<button class="submit" type="submit">Aggiungi</button>'
-  return '<div class="overlay"><div class="dim" data-close></div><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><button type="button" class="handle" data-drag aria-label="Trascina per chiudere"><span></span></button><div class="sheet-head"><h2 id="sheet-title">' + title + '</h2><button type="button" class="top-action" data-close aria-label="Chiudi">' + icon("close") + '</button></div><form class="sheet-body" id="expense-form" data-kind="' + kind + '" novalidate>' + kinds + panels + save + "</form></section></div>"
+  return '<div class="overlay"><div class="dim" data-close></div><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><button type="button" class="handle" data-drag aria-label="Trascina per chiudere"><span></span></button><div class="sheet-head"><h2 id="sheet-title">' + title + '</h2></div><form class="sheet-body" id="expense-form" data-kind="' + kind + '" novalidate>' + kinds + panels + save + "</form></section></div>"
 }
 
 function blank(route) {
   const { y, m } = D.parseYM(route.ym)
   const today = D.todayISO()
   const date = today.slice(0, 7) === route.ym ? today : D.iso(y, m, 1)
-  return { name: "", amount: "", date, renewDay: String(Math.min(28, new Date().getDate())), total: "", months: "", startDate: date, startedMonth: route.ym }
+  return { name: "", amount: "", date, renewDay: String(Math.min(28, new Date().getDate())), total: "", months: "", startDate: date, firstDate: date, startedMonth: route.ym }
 }
 
 function centsToField(cents) {
@@ -289,12 +334,12 @@ function centsToField(cents) {
 
 function valuesFrom(entry) {
   if (entry.kind === "once") {
-    return { name: entry.name, amount: centsToField(entry.amount), date: entry.date, renewDay: "1", total: "", months: "", startDate: entry.date, startedMonth: entry.date.slice(0, 7) }
+    return { name: entry.name, amount: centsToField(entry.amount), date: entry.date, renewDay: "1", total: "", months: "", startDate: entry.date, firstDate: entry.date, startedMonth: entry.date.slice(0, 7) }
   }
   if (entry.kind === "sub") {
-    return { name: entry.name, amount: centsToField(entry.amount), date: D.todayISO(), renewDay: String(entry.renewDay), total: "", months: "", startDate: entry.startedMonth + "-01", startedMonth: entry.startedMonth, disdetta: Boolean(entry.disdettaMonth || entry.deactivatedOn) }
+    return { name: entry.name, amount: centsToField(entry.amount), date: D.todayISO(), renewDay: String(entry.renewDay), total: "", months: "", startDate: entry.startedMonth + "-01", firstDate: entry.startedMonth + "-01", startedMonth: entry.startedMonth, disdetta: Boolean(entry.disdettaMonth || entry.deactivatedOn) }
   }
-  return { name: entry.name, amount: "", date: entry.startDate, renewDay: "1", total: centsToField(entry.total), months: String(entry.months), startDate: entry.startDate, startedMonth: entry.startDate.slice(0, 7) }
+  return { name: entry.name, amount: "", date: entry.startDate, renewDay: "1", total: centsToField(entry.total), months: String(entry.months), startDate: entry.startDate, firstDate: entry.startDate, startedMonth: entry.startDate.slice(0, 7) }
 }
 
 function listNames() {
@@ -309,46 +354,54 @@ function panelOnce(values, kind) {
     "</div>"
 }
 
-function panelSub(values, route, editing, kind) {
-  const start = editing
-    ? field("started", "Primo mese", input('id="started" name="started" type="month" value="' + esc(values.startedMonth) + '"'))
-    : '<p class="hint">Entra da ' + esc(D.monthTitle(route.ym)) + " in avanti.</p>"
+function panelSub(values, editing, kind) {
   const disdetta = editing
     ? '<label class="check"><input type="checkbox" name="disdetta"' + (values.disdetta ? " checked" : "") + ">Ho disdetto: dal mese prossimo non si rinnova</label>"
     : ""
   return '<div data-panel="sub"' + (kind === "sub" ? "" : " hidden") + ">" +
     field("amount", "Tariffa mensile", input('id="amount-sub" name="amount" inputmode="decimal" placeholder="15,99" value="' + esc(values.amount) + '"')) +
     field("renew", "Giorno di rinnovo", input('id="renew" name="renew" inputmode="numeric" placeholder="28" value="' + esc(values.renewDay) + '"')) +
-    start + disdetta + "</div>"
+    field("started", "Data primo addebito", input('id="started" name="started" type="date" value="' + esc(values.firstDate) + '"')) +
+    disdetta + "</div>"
 }
 
 function panelPlan(values, kind) {
   return '<div data-panel="plan"' + (kind === "plan" ? "" : " hidden") + ">" +
     field("total", "Costo totale", input('id="total-plan" name="total" inputmode="decimal" placeholder="1.000,00" value="' + esc(values.total) + '"')) +
     field("months", "Numero di mesi", input('id="months-plan" name="months" inputmode="numeric" placeholder="12" value="' + esc(values.months) + '"')) +
-    field("start", "Data del primo addebito", input('id="start-plan" name="start" type="date" value="' + esc(values.startDate) + '"')) +
+    field("start", "Data primo addebito", input('id="start-plan" name="start" type="date" value="' + esc(values.startDate) + '"')) +
     "</div>"
 }
 
 function render() {
   sheetAbort?.abort()
   const route = parseRoute()
-  if (route.name !== "impegni") armedId = null
+  const key = route.name === "archivio" ? "archivio/" + route.year : route.name === "documento" ? "documento/" + route.ym : route.name
+  const screen = document.getElementById("contenuto")
+  const keep = key === viewKey
+  const saved = keep ? { page: screen.scrollTop, ledger: screen.querySelector(".ledger")?.scrollTop || 0 } : null
   document.getElementById("top").innerHTML = topHTML(route)
-  document.getElementById("contenuto").innerHTML = route.name === "archivio"
+  screen.innerHTML = route.name === "archivio"
     ? archiveHTML(route)
     : route.name === "impegni"
       ? commitmentsHTML()
-      : monthHTML(route)
+      : route.name === "documento"
+        ? documentHTML(route)
+        : monthHTML(route)
   document.getElementById("nav").innerHTML = navHTML(route)
   settleDock(dockIndexOf(route))
   const root = document.getElementById("sheet-root")
-  const open = route.name === "mese" && route.mode
-  root.innerHTML = open ? sheetHTML(route) : ""
-  setInert(Boolean(open && root.innerHTML))
+  const markup = route.mode ? sheetHTML(route) : ""
+  root.innerHTML = markup
+  setInert(Boolean(markup))
   bindScreen(route)
-  if (open && root.innerHTML) bindSheet(route)
-  document.getElementById("contenuto").scrollTop = 0
+  if (markup) bindSheet(route)
+  viewKey = key
+  if (saved) {
+    screen.scrollTop = saved.page
+    const ledger = screen.querySelector(".ledger")
+    if (ledger) ledger.scrollTop = saved.ledger
+  } else screen.scrollTop = 0
 }
 
 function setInert(on) {
@@ -373,28 +426,13 @@ function bindScreen(route) {
         settleFace(button, 0, 0)
         return
       }
-      go("#/mese/" + route.ym + "/modifica/" + button.dataset.edit)
+      go(editHash(route, button.dataset.edit))
     })
   })
   document.querySelectorAll("[data-ask]").forEach((button) => {
     button.addEventListener("click", () => askDelete(button.dataset.ask, route))
   })
   bindSwipes()
-  document.querySelectorAll("[data-arm]").forEach((button) => {
-    button.addEventListener("click", () => {
-      armedId = button.dataset.arm
-      render()
-    })
-  })
-  document.querySelectorAll("[data-cancel]").forEach((button) => {
-    button.addEventListener("click", () => {
-      armedId = null
-      render()
-    })
-  })
-  document.querySelectorAll("[data-stop]").forEach((button) => {
-    button.addEventListener("click", () => stopSub(button.dataset.stop))
-  })
 }
 
 function downloadMonth(ym) {
@@ -502,10 +540,11 @@ function submitForm(form, route) {
   } else if (kind === "sub") {
     const amount = D.parseAmount(valueOf(form, panel, "[name=amount]"))
     const renewDay = Number(valueOf(form, panel, "[name=renew]"))
-    const startedMonth = panel.querySelector("[name=started]")?.value || route.ym
+    const firstDate = valueOf(form, panel, "[name=started]")
+    const startedMonth = firstDate.slice(0, 7)
     if (amount == null) errors.amount = "Scrivi la tariffa mensile."
     if (!Number.isInteger(renewDay) || renewDay < 1 || renewDay > 31) errors.renew = "Il giorno va da 1 a 31."
-    if (!/^\d{4}-\d{2}$/.test(startedMonth)) errors.started = "Scegli il primo mese."
+    if (!isoDate(firstDate)) errors.started = "Scegli la data del primo addebito."
     if (!Object.keys(errors).length) {
       const previous = entries.find((item) => item.id === route.id)
       const wantsEnd = Boolean(panel.querySelector("[name=disdetta]")?.checked)
@@ -543,10 +582,7 @@ function submitForm(form, route) {
   persist()
   dirty = false
   status(route.mode === "edit" ? "Spesa aggiornata." : "Spesa aggiunta.")
-  const ym = route.mode === "edit"
-    ? route.ym
-    : entry.kind === "once" ? entry.date.slice(0, 7) : entry.kind === "plan" ? entry.startDate.slice(0, 7) : entry.startedMonth
-  go("#/mese/" + ym)
+  go(placeHash(route))
 }
 
 function showErrors(form, errors) {
@@ -608,7 +644,7 @@ function askDelete(id, route) {
       persist()
       dirty = false
       status("Spesa eliminata.")
-      go("#/mese/" + route.ym)
+      go(placeHash(route))
     })
   }
   host.querySelectorAll("[data-confirm-cancel]").forEach((el) => el.addEventListener("click", () => finish(false)))
@@ -771,30 +807,32 @@ function bindSwipes() {
   })
 }
 
-function stopSub(id) {
-  const month = D.currentYM()
-  entries = entries.map((entry) => entry.id === id ? { ...entry, disdettaMonth: month, deactivatedOn: null } : entry)
-  persist()
-  armedId = null
-  status("Disdetta registrata. Dal mese prossimo non si rinnova.")
-  render()
-}
-
 function leave(route) {
-  if (dirty && !window.confirm("Ci sono modifiche non salvate. Vuoi uscire?")) return
+  if (dirty && !window.confirm("Ci sono modifiche non salvate. Vuoi uscire?")) {
+    const panel = document.querySelector(".sheet")
+    const dim = document.querySelector(".dim")
+    if (panel) {
+      panel.style.transition = "transform 320ms var(--ease-drawer)"
+      panel.style.transform = "translateY(0)"
+    }
+    if (dim) {
+      dim.style.transition = "opacity 320ms var(--ease-out)"
+      dim.style.opacity = "1"
+    }
+    return
+  }
   dirty = false
-  go("#/mese/" + route.ym)
+  go(placeHash(route))
 }
 
 function bindDrag(panel, dim, route, reduce) {
-  const handle = panel.querySelector("[data-drag]")
+  let pointerId = null
   let dragging = false
   let startY = 0
   let origin = 0
   let lastY = 0
   let lastT = 0
   let velocity = 0
-  let moved = 0
   let height = 1
   let closeTimer = 0
 
@@ -804,37 +842,54 @@ function bindDrag(panel, dim, route, reduce) {
     return new DOMMatrix(transform).m42
   }
 
-  handle.addEventListener("pointerdown", (event) => {
+  function blocked(target) {
+    if (target.closest("[data-drag]")) return false
+    return Boolean(target.closest("input, textarea, select, button, a, .kinds, .check"))
+  }
+
+  panel.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || blocked(event.target)) return
+    event.preventDefault()
     window.clearTimeout(closeTimer)
-    dragging = true
-    moved = 0
-    origin = Math.max(0, currentY())
+    pointerId = event.pointerId
+    dragging = false
     startY = event.clientY
     lastY = event.clientY
     lastT = performance.now()
     velocity = 0
     height = panel.getBoundingClientRect().height || 1
-    panel.style.transition = "none"
-    dim.style.transition = "none"
-    handle.setPointerCapture(event.pointerId)
   })
-  handle.addEventListener("pointermove", (event) => {
-    if (!dragging) return
+  panel.addEventListener("pointermove", (event) => {
+    if (event.pointerId !== pointerId) return
     const dy = event.clientY - startY
-    moved = Math.max(moved, Math.abs(dy))
-    const y = Math.max(0, origin + dy)
+    if (!dragging) {
+      if (dy < 8) return
+      dragging = true
+      origin = Math.max(0, currentY())
+      startY = event.clientY
+      lastY = event.clientY
+      panel.classList.add("is-dragging")
+      panel.style.transition = "none"
+      dim.style.transition = "none"
+      panel.setPointerCapture(event.pointerId)
+    }
+    const y = Math.max(0, origin + (event.clientY - startY))
     const now = performance.now()
     const dt = now - lastT
-    if (dt > 0) velocity = (event.clientY - lastY) / dt
+    if (dt > 0 && dt < 60) velocity = (event.clientY - lastY) / dt
+    else velocity *= 0.4
     lastY = event.clientY
     lastT = now
     panel.style.transform = "translateY(" + y + "px)"
     dim.style.opacity = String(Math.max(0, 1 - y / height))
   })
-  function finish() {
+  function finish(event) {
+    if (event.pointerId !== pointerId) return
+    pointerId = null
+    panel.classList.remove("is-dragging")
     if (!dragging) return
     dragging = false
-    const y = Math.max(0, origin + (lastY - startY))
+    const y = Math.max(0, currentY())
     const dismiss = y > height * 0.4 || velocity > 0.65
     const duration = reduce ? "1ms" : "320ms"
     panel.style.transition = "transform " + duration + " var(--ease-drawer)"
@@ -848,11 +903,8 @@ function bindDrag(panel, dim, route, reduce) {
       dim.style.opacity = "1"
     }
   }
-  handle.addEventListener("pointerup", finish)
-  handle.addEventListener("pointercancel", finish)
-  handle.addEventListener("click", (event) => {
-    if (moved > 6) event.preventDefault()
-  })
+  panel.addEventListener("pointerup", finish)
+  panel.addEventListener("pointercancel", finish)
 }
 
 function trapFocus(event, root) {

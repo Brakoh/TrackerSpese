@@ -18,11 +18,11 @@ Tre tipi, distinti da come la cifra cade sui mesi:
 - Abbonamento, solo mensile. Nome, tariffa mensile, giorno di rinnovo. Si disattiva senza una data di scadenza. Un abbonamento attivo entra nel mese anche se il rinnovo è più avanti. La disdetta lascia il mese in corso e toglie il rinnovo da quello successivo.
 - Rateizzazione. Nome, data del primo addebito, costo totale, numero di mesi. Compare dal mese del primo addebito, per quel numero di mesi, con la quota (totale diviso mesi). L’ultima quota prende i centesimi che avanzano. Un giorno 31, in un mese più corto, cade l’ultimo giorno.
 
-La schermata principale è il mese corrente: le spese che gli appartengono e l’aggiunta di nuove. Il totale somma tutto ciò che appartiene al mese, anche un rinnovo più avanti. Ogni riga mostra il giorno, così si distingue ciò che è già passato da ciò che arriva.
+La schermata principale è solo il mese corrente: le spese che gli appartengono e l’aggiunta di nuove. Il totale somma tutto ciò che appartiene al mese, anche un rinnovo più avanti. Ogni riga mostra il giorno, così si distingue ciò che è già passato da ciò che arriva. Una spesa nuova, anche se è iniziata mesi fa, riporta al mese corrente.
 
-Mesi trascorsi. Elenco con filtro per anno, da gennaio in alto fino al mese corrente in basso, totale di ogni mese, totale dell’anno in fondo. Un mese si riapre e si corregge. Ogni riga ha il download del PDF.
+Documenti. Elenco con filtro per anno, da gennaio in alto fino al mese corrente in basso, totale di ogni mese, totale dell’anno in fondo. Il mese corrente riapre la schermata principale. Un mese già trascorso apre un rendiconto in sola lettura. Ogni riga ha il download del PDF.
 
-Impegni attivi. Abbonamenti attivi, con la disdetta. Rateizzazioni attive, con la data di fine pagamento. L’app sull’iPhone resta in verticale e non si zooma.
+Fatturazioni ricorrenti. Abbonamenti attivi e rateizzazioni attive. La scheda di modifica si apre sopra la pagina da cui parte e, chiusa, riporta lì. La disdetta sta nella modifica dell’abbonamento. L’app sull’iPhone resta in verticale e non si zooma.
 
 ### Stile
 
