@@ -243,6 +243,10 @@ img { max-width: 100%; }
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
   margin-top: 18px;
+  margin-left: calc(-20px - var(--safe-left));
+  margin-right: calc(-20px - var(--safe-right));
+  padding-left: calc(20px + var(--safe-left));
+  padding-right: calc(20px + var(--safe-right));
   scrollbar-width: none;
 }
 
@@ -447,8 +451,6 @@ h2 {
 
 .swipe {
   position: relative;
-  overflow: hidden;
-  clip-path: inset(0);
   background: var(--paper);
   touch-action: pan-y;
 }
