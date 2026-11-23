@@ -25,6 +25,8 @@ let sheetAbort = null
 let suppress = false
 let dockIndex = 0
 let confirming = false
+let homeFilter = null
+let filterMotion = 0
 
 function icon(name) {
   return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + "</svg>"
@@ -202,19 +204,27 @@ function monthHTML(route) {
   const total = D.totalOf(lines)
   const fee = lines.reduce((sum, line) => line.kind === "once" ? sum : sum + line.amount, 0)
   const ym = route.ym
-  const actions = [
-    ["nuova/once", "add", "Aggiungi"],
-    ["nuova/once", "once", "Occasionale"],
-    ["nuova/sub", "sub", "Abbonamento"],
-    ["nuova/plan", "plan", "Rate"],
-  ].map(([path, bubble, label]) => {
-    return '<a href="#/mese/' + path + '"><span class="bubble ' + bubble + '">' + icon(bubble === "add" ? "plus" : bubble) + "</span>" + esc(label) + "</a>"
+  if (!lines.length) homeFilter = null
+  const filters = [
+    ["once", "once", "Occasionale"],
+    ["sub", "sub", "Abbonamento"],
+    ["plan", "plan", "Rate"],
+  ].map(([kind, bubble, label]) => {
+    const on = homeFilter === kind
+    const dim = lines.length && homeFilter && !on ? " is-dim" : ""
+    return '<button type="button" class="filter' + (on ? " is-on" : "") + dim + '" data-filter="' + kind + '" aria-pressed="' + (on ? "true" : "false") + '"' + (lines.length ? "" : " disabled") + '><span class="bubble ' + bubble + '">' + icon(bubble) + "</span>" + esc(label) + "</button>"
   }).join("")
-  const list = lines.length
-    ? '<ul class="moves">' + lines.map((line) => {
-      return '<li class="swipe"><button type="button" class="swipe-delete" data-ask="' + esc(line.id) + '" tabindex="-1" aria-hidden="true" aria-label="Elimina ' + esc(line.name) + '">' + icon("trash") + '</button><button type="button" class="move" data-edit="' + esc(line.id) + '" title="' + esc(line.name) + '"><span class="badge ' + line.kind + '">' + icon(line.kind) + '</span><span class="move-text"><span class="move-name">' + esc(line.name) + '</span><span class="move-meta">' + esc(meta(line)) + '</span></span><span class="move-amount">' + esc(D.formatEUR(line.amount)) + "</span></button></li>"
-    }).join("") + "</ul>"
-    : '<div class="empty"><img src="assets/img/mese-vuoto.jpg" alt="" width="1024" height="1024"><p>Nessuna spesa in ' + esc(D.monthName(ym).toLowerCase()) + ". Aggiungine una con i tasti qui sopra.</p></div>"
+  const actions = '<a href="#/mese/nuova/once"><span class="bubble add">' + icon("plus") + "</span>Aggiungi</a>" + filters
+  const rows = lines.map((line, index) => [line, index])
+  const match = homeFilter ? rows.filter(([line]) => line.kind === homeFilter) : []
+  const rest = homeFilter ? rows.filter(([line]) => line.kind !== homeFilter) : []
+  const list = !lines.length
+    ? '<div class="empty"><img src="assets/img/mese-vuoto.jpg" alt="" width="1024" height="1024"><p>Nessuna spesa in ' + esc(D.monthName(ym).toLowerCase()) + ". Aggiungine una.</p></div>"
+    : !homeFilter
+      ? '<ul class="moves">' + rows.map(([line, index]) => expenseRow(line, index)).join("") + "</ul>"
+      : !match.length
+        ? '<p class="filter-none">' + esc(filterEmptyCopy(homeFilter)) + '</p><div class="filter-rule" role="separator"></div><ul class="moves">' + rows.map(([line, index]) => expenseRow(line, index)).join("") + "</ul>"
+        : '<ul class="moves">' + match.map(([line, index]) => expenseRow(line, index)).join("") + '<li class="filter-rule" role="separator"></li>' + rest.map(([line, index]) => expenseRow(line, index)).join("") + "</ul>"
   return '<article class="hero"><div class="hero-copy"><h1>' + esc(D.monthName(ym)) + '</h1><p class="hero-amount"><span class="sr">Totale del mese </span>' + esc(D.formatEUR(total)) + '</p><p class="hero-fee">Canone mensile: ' + esc(D.formatEUR(fee)) + "/mese</p></div><div class=\"hero-art\"><img src=\"assets/img/hero-spesa.jpg\" alt=\"\" width=\"1024\" height=\"1024\" fetchpriority=\"high\"></div></article><div class=\"actions\">" + actions + '</div><div class="ledger">' + list + "</div>"
 }
 
@@ -380,9 +390,32 @@ function panelPlan(values, kind) {
     "</div>"
 }
 
+function filterEmptyCopy(kind) {
+  if (kind === "once") return "Nessuna spesa occasionale in questo mese."
+  if (kind === "sub") return "Nessun abbonamento in questo mese."
+  return "Nessuna rata in questo mese."
+}
+
+function filterStatus(kind, empty) {
+  if (!kind) return "Filtro annullato"
+  if (empty) return filterEmptyCopy(kind)
+  if (kind === "once") return "Spese occasionali in cima"
+  if (kind === "sub") return "Abbonamenti in cima"
+  return "Rate in cima"
+}
+
+function expenseRow(line, order) {
+  return '<li class="swipe" data-kind="' + line.kind + '" data-order="' + order + '"><button type="button" class="swipe-delete" data-ask="' + esc(line.id) + '" tabindex="-1" aria-hidden="true" aria-label="Elimina ' + esc(line.name) + '">' + icon("trash") + '</button><button type="button" class="move" data-edit="' + esc(line.id) + '" title="' + esc(line.name) + '"><span class="badge ' + line.kind + '">' + icon(line.kind) + '</span><span class="move-text"><span class="move-name">' + esc(line.name) + '</span><span class="move-meta">' + esc(meta(line)) + '</span></span><span class="move-amount">' + esc(D.formatEUR(line.amount)) + "</span></button></li>"
+}
+
 function render() {
   sheetAbort?.abort()
   const route = parseRoute()
+  if (route.name !== "mese") {
+    homeFilter = null
+    const live = document.getElementById("status")
+    if (live && /in cima$|^Filtro annullato$|^Nessun/.test(live.textContent)) live.textContent = ""
+  }
   const key = route.name === "archivio" ? "archivio/" + route.year : route.name === "documento" ? "documento/" + route.ym : route.name
   const screen = document.getElementById("contenuto")
   const samePage = key === viewKey
@@ -446,7 +479,108 @@ function bindScreen(route) {
   document.querySelectorAll("[data-ask]").forEach((button) => {
     button.addEventListener("click", () => askDelete(button.dataset.ask, route))
   })
+  document.querySelectorAll("[data-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.disabled) return
+      const kind = button.dataset.filter
+      homeFilter = homeFilter === kind ? null : kind
+      paintFilters()
+      const empty = reorderLedger()
+      status(filterStatus(homeFilter, empty))
+    })
+  })
   bindSwipes()
+}
+
+function paintFilters() {
+  document.querySelectorAll("[data-filter]").forEach((button) => {
+    const on = homeFilter === button.dataset.filter
+    button.classList.toggle("is-on", on)
+    button.classList.toggle("is-dim", Boolean(homeFilter) && !on)
+    button.setAttribute("aria-pressed", on ? "true" : "false")
+  })
+}
+
+function reorderLedger() {
+  const list = document.querySelector(".ledger .moves")
+  if (!list) return false
+  closeSwipes()
+  const token = ++filterMotion
+  const rows = [...list.querySelectorAll(":scope > .swipe")]
+  const reduce = reduceMotion()
+  const before = new Map()
+  if (!reduce) {
+    rows.forEach((row) => {
+      row.style.transition = "none"
+      before.set(row, row.getBoundingClientRect().top)
+      row.style.transform = "none"
+    })
+  }
+  list.querySelectorAll(".filter-rule").forEach((rule) => rule.remove())
+  const ledger = list.parentElement
+  ledger.querySelector(".filter-none")?.remove()
+  ledger.querySelector(":scope > .filter-rule")?.remove()
+  const order = [...rows].sort((a, b) => Number(a.dataset.order) - Number(b.dataset.order))
+  const match = homeFilter ? order.filter((row) => row.dataset.kind === homeFilter) : []
+  const rest = homeFilter ? order.filter((row) => row.dataset.kind !== homeFilter) : order
+  list.classList.add("quiet")
+  if (!homeFilter || !match.length) {
+    order.forEach((row) => list.appendChild(row))
+  } else {
+    match.forEach((row) => list.appendChild(row))
+    const rule = document.createElement("li")
+    rule.className = "filter-rule"
+    rule.setAttribute("role", "separator")
+    list.appendChild(rule)
+    rest.forEach((row) => list.appendChild(row))
+  }
+  const empty = Boolean(homeFilter) && !match.length
+  if (empty) {
+    const note = document.createElement("p")
+    note.className = "filter-none"
+    note.textContent = filterEmptyCopy(homeFilter)
+    const rule = document.createElement("div")
+    rule.className = "filter-rule"
+    rule.setAttribute("role", "separator")
+    list.before(rule)
+    rule.before(note)
+  }
+  const arriving = [...ledger.querySelectorAll(".filter-none, .filter-rule")]
+  if (reduce) {
+    rows.forEach((row) => {
+      row.style.transition = ""
+      row.style.transform = ""
+    })
+    return empty
+  }
+  rows.forEach((row) => {
+    const dy = before.get(row) - row.getBoundingClientRect().top
+    row.style.transform = Math.abs(dy) < 0.5 ? "" : "translateY(" + dy + "px)"
+  })
+  arriving.forEach((el) => { el.style.opacity = "0" })
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (token !== filterMotion) return
+      rows.forEach((row) => {
+        if (!row.style.transform) {
+          row.style.transition = ""
+          return
+        }
+        row.style.transition = "transform 250ms var(--ease-in-out)"
+        row.style.transform = ""
+        row.addEventListener("transitionend", (event) => {
+          if (event.propertyName !== "transform" || token !== filterMotion) return
+          row.style.transition = ""
+          row.style.transform = ""
+        })
+      })
+      arriving.forEach((el) => {
+        el.style.transition = "opacity 180ms var(--ease-out)"
+        el.style.opacity = "1"
+      })
+    })
+  })
+  return empty
 }
 
 function downloadMonth(ym) {

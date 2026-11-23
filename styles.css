@@ -352,22 +352,44 @@ h2 {
   margin-top: 22px;
 }
 
-.actions a {
+.actions a,
+.actions button {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
   min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--ink);
+  font: inherit;
   font-size: 12px;
   font-weight: 500;
   letter-spacing: -0.01em;
   line-height: 1.2;
   text-align: center;
   text-decoration: none;
+  cursor: pointer;
+  appearance: none;
+}
+
+.actions button {
+  transition: opacity 180ms var(--ease-out);
+}
+
+.actions button.is-dim,
+.actions button:disabled {
+  opacity: 0.2;
+}
+
+.actions button:disabled {
+  cursor: default;
 }
 
 .bubble {
+  position: relative;
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -375,6 +397,21 @@ h2 {
   place-items: center;
   background: #fff;
   box-shadow: var(--shadow);
+}
+
+.actions button .bubble::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms var(--ease-out);
+}
+
+.actions button.is-on .bubble::after {
+  opacity: 1;
 }
 
 .bubble svg { width: 22px; height: 22px; }
@@ -404,7 +441,7 @@ h2 {
   transition: transform 120ms var(--ease-out);
 }
 
-.month-card > a:active, .month-pdf:active, .commit:active, .actions a:active .bubble, .submit:active, .stop:active, .text-btn:active, .trash:active, .move:active {
+.month-card > a:active, .month-pdf:active, .commit:active, .actions a:active .bubble, .actions button:not(:disabled):active .bubble, .submit:active, .stop:active, .text-btn:active, .trash:active, .move:active {
   transform: scale(0.97);
 }
 
@@ -512,9 +549,27 @@ h2 {
 .badge.sub { background: var(--lime); color: var(--lime-ink); }
 .badge.plan { background: var(--violet); color: var(--violet-ink); }
 
+.filter-none {
+  margin: 2px 2px 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+
+.filter-rule {
+  height: 1px;
+  margin: 12px 2px;
+  background: var(--ink);
+  flex: none;
+}
+
 .moves > li {
   animation: rise 220ms var(--ease-out) both;
 }
+
+.moves > li.filter-rule { animation: none; }
 
 .moves > li:nth-child(2) { animation-delay: 28ms; }
 .moves > li:nth-child(3) { animation-delay: 56ms; }
@@ -1144,12 +1199,12 @@ h2 {
 
 @media (prefers-reduced-motion: reduce) {
   .moves > li,
-  .move, .month-card > a, .month-pdf, .commit, .bubble, .submit, .dock a, .dock-mark, .trash, .confirm-pop, .confirm-card {
+  .move, .month-card > a, .month-pdf, .commit, .bubble, .actions button, .actions button .bubble::after, .filter-rule, .filter-none, .submit, .dock a, .dock-mark, .trash, .confirm-pop, .confirm-card {
     animation: none;
     transition: none;
   }
 
-  .move:active, .month-card > a:active, .month-pdf:active, .commit:active, .actions a:active .bubble, .submit:active, .trash:active, .confirm-actions button:active, .swipe-delete:active svg {
+  .move:active, .month-card > a:active, .month-pdf:active, .commit:active, .actions a:active .bubble, .actions button:not(:disabled):active .bubble, .submit:active, .trash:active, .confirm-actions button:active, .swipe-delete:active svg {
     transform: none;
   }
 }
